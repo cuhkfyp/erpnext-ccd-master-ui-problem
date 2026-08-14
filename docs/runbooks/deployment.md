@@ -47,8 +47,13 @@ the four runtime copies exist, and the administrator bootstrap works before any
 further action. Never make an unrecorded portal edit only inside a container.
 
 The deployment script does not restart containers unless `--restart` is passed.
-Use that option only in a controlled window; it invokes the established SSHFS
-remount safeguard afterward. A code/migration staging run without reload is:
+Without that option it sends Gunicorn a graceful HUP and verifies that both web
+workers received new process IDs. This is required because the container uses
+`--preload`; clearing Frappe's cache alone does not import newly deployed Python
+API methods. The graceful reload leaves the backend container start time, SSHFS
+mount, queues, scheduler, database, Redis, frontend, and websocket unchanged.
+Use `--restart` only in a controlled window; it invokes the established SSHFS
+remount safeguard afterward. A normal code/migration deployment is:
 
 ```bash
 ./deployment/deploy_development.sh
@@ -80,10 +85,15 @@ but must not touch Docker or the site, synchronize only the host recovery copy:
 - If an app-registry check fails, inspect and repair `sites/apps.txt` before any
   restart. Confirm that every app is on its own line with `bench --site frontend
   list-apps`; then reload only backend, scheduler, queue-long, and queue-short.
-- A controlled code reload affects those four Python runtime containers only.
-  Confirm their prior state and the SSHFS mount after the reload; do not restart
-  the database, Redis, frontend, websocket, VPN, or unrelated services for a
-  portal-only deployment.
+- A normal no-restart deployment gracefully reloads only the backend Gunicorn
+  workers. A controlled `--restart` affects the four Python runtime containers.
+  Confirm their prior state and the SSHFS mount after a container restart; do
+  not restart the database, Redis, frontend, websocket, VPN, or unrelated
+  services for a portal-only deployment.
+- Verify a newly added whitelisted method through the running HTTP server after
+  deployment. A fresh `bench execute` or standalone Python process can load new
+  source successfully while preloaded Gunicorn workers still serve the old
+  module, producing a misleading browser `has no attribute` error.
 
 #### Duplicate SSHFS mount-layer case
 

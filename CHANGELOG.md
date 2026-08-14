@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.3 - 2026-08-14
+
+- Added a verified graceful Gunicorn worker reload to no-restart deployments so
+  new frontend assets cannot call stale preloaded Python API modules.
+- Added an operational check requiring new methods to be tested through the
+  running HTTP server rather than only through a fresh Python process.
+
 ## 0.1.2 - 2026-08-14
 
 - Replaced error-prone administration references with labelled selections.

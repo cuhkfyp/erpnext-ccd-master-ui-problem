@@ -93,6 +93,33 @@ if (( ! RUNTIME_ONLY )); then
 fi
 docker exec frappe_docker-backend-1 "$BENCH" --site "$SITE" clear-cache
 
+if (( ! RESTART )); then
+	old_workers="$(docker exec frappe_docker-backend-1 sh -c \
+		'pgrep -P 1 -x gunicorn 2>/dev/null || true' | tr '\n' ' ')"
+	docker exec frappe_docker-backend-1 grep -qx gunicorn /proc/1/comm
+	docker kill --signal=HUP frappe_docker-backend-1 >/dev/null
+	workers_reloaded=0
+	for _attempt in {1..40}; do
+		current_workers="$(docker exec frappe_docker-backend-1 sh -c \
+			'pgrep -P 1 -x gunicorn 2>/dev/null || true' | tr '\n' ' ')"
+		stale_worker=0
+		for worker in $old_workers; do
+			[[ " $current_workers " == *" $worker "* ]] && stale_worker=1
+		done
+		set -- $current_workers
+		if (( $# >= 2 && ! stale_worker )); then
+			workers_reloaded=1
+			break
+		fi
+		sleep 0.25
+	done
+	(( workers_reloaded )) || {
+		echo "Gunicorn did not complete its graceful worker reload" >&2
+		exit 1
+	}
+	echo "Gunicorn web workers gracefully reloaded without restarting the backend container."
+fi
+
 asset_stage="$(mktemp -d "$VOLUME_ROOT/.ccd-portal-assets.XXXXXX")"
 trap 'rm -rf -- "$asset_stage"' EXIT
 mkdir -p "$asset_stage/$APP_NAME"
