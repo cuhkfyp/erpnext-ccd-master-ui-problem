@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.2 - 2026-08-14
+
+- Replaced error-prone administration references with labelled selections.
+- Added parser-specific guidance and validation; Exact no longer retains stale
+  delimiter or regular-expression values.
+- Made Active checkboxes visible and accessible in the administration forms.
+
 ## 0.1.1 - 2026-08-14
 
 - Added the governed centre-key target to the existing CCD Registration field

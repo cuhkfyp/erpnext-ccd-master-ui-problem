@@ -26,6 +26,14 @@ legitimately shared record, the canonical value may yield more than one centre;
 the indexer creates an independent relation for each. This never relates the
 centres themselves.
 
+Use **Exact** when the synchronized value is already one complete centre code,
+such as `12345`. Exact requires neither Delimiter nor Pattern. Use **Delimited**
+only when a record legitimately carries multiple centre codes in one value.
+Use **Regular Expression** only when a bounded extraction pattern is required;
+Pattern is mandatory for that parser. The administration form hides irrelevant
+parser fields and presents registrations, centres, profiles, and users as
+governed selections rather than free-text identifiers.
+
 ## Build and refresh
 
 Run a full refresh after the secret, active policy, profiles, centres, and aliases

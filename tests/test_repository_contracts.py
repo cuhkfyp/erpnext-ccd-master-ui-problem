@@ -71,6 +71,18 @@ class RepositoryContractTests(unittest.TestCase):
 		for browser_store in ("localStorage", "sessionStorage", "indexedDB"):
 			self.assertNotIn(browser_store, source)
 
+	def test_admin_forms_use_guided_references_and_parser_fields(self):
+		panel = (ROOT / "frontend" / "src" / "components" / "AdminPanel.vue").read_text(encoding="utf-8")
+		admin = (ROOT / "ccd_portal" / "admin.py").read_text(encoding="utf-8")
+		style = (ROOT / "frontend" / "src" / "style.css").read_text(encoding="utf-8")
+		self.assertIn('reference:"centres"', panel)
+		self.assertIn('reference:"profiles"', panel)
+		self.assertIn('showWhen:{parser_type:"Regular Expression"}', panel)
+		self.assertIn("Enter a bounded pattern, or choose Exact", panel)
+		self.assertIn("def reference_options():", admin)
+		self.assertIn('"CCD Registration"', admin)
+		self.assertIn('.field input[type="checkbox"]', style)
+
 	def test_built_assets_have_no_source_maps(self):
 		assets = ROOT / "ccd_portal" / "public" / "ccd-portal" / "assets"
 		self.assertEqual(list(assets.glob("*.map")), [])

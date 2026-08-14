@@ -56,6 +56,10 @@ IMMUTABLE_RESOURCE_FIELDS = {
 }
 
 
+def _reference_option(value, label: str, **metadata):
+	return {"value": value, "label": label, **metadata}
+
+
 def _administrator_context(event_type: str):
 	try:
 		return require_access_administrator()
@@ -77,6 +81,101 @@ def list_resources(resource: str):
 	rows = frappe.get_all(doctype, fields=list(response_fields), order_by="modified desc", limit=500)
 	write_event("Administration Read", context=context, metadata={"resource": resource})
 	return {"resource": resource, "rows": [dict(row) for row in rows]}
+
+
+@frappe.whitelist()
+def reference_options():
+	"""Return narrow governance references for accessible administration selects."""
+	context = _administrator_context("Administration Reference Read")
+	centres = frappe.get_all(
+		"CCD Portal Centre",
+		fields=["name", "centre_code", "centre_name", "active"],
+		order_by="centre_name asc, centre_code asc",
+		limit=500,
+	)
+	sources = frappe.get_all(
+		"CCD Portal Source Profile",
+		fields=["name", "profile_code", "source_registration", "active"],
+		order_by="profile_code asc",
+		limit=500,
+	)
+	profiles = frappe.get_all(
+		"CCD Portal User Profile",
+		fields=["name", "user", "authority", "active"],
+		order_by="user asc",
+		limit=500,
+	)
+	registrations = frappe.get_all(
+		"CCD Registration",
+		filters={"docstatus": 1},
+		fields=["name", "app_name"],
+		order_by="name asc",
+		limit=500,
+	)
+	users = frappe.get_all(
+		"User",
+		filters={"enabled": 1, "user_type": "System User"},
+		fields=["name", "full_name"],
+		order_by="full_name asc, name asc",
+		limit=500,
+	)
+	departments = frappe.get_all(
+		"Department",
+		fields=["name", "department_name", "disabled"],
+		order_by="department_name asc, name asc",
+		limit=500,
+	)
+	result = {
+		"centres": [
+			_reference_option(
+				row.name,
+				f"{row.centre_name} — {row.centre_code}",
+				active=bool(row.active),
+			)
+			for row in centres
+		],
+		"source_profiles": [
+			_reference_option(
+				row.name,
+				f"{row.profile_code} — {row.source_registration}",
+				active=bool(row.active),
+			)
+			for row in sources
+		],
+		"profiles": [
+			_reference_option(
+				row.user,
+				f"{row.user} — {row.authority}",
+				active=bool(row.active),
+			)
+			for row in profiles
+		],
+		"registrations": [
+			_reference_option(row.name, f"{row.name} — {row.app_name}" if row.app_name else row.name)
+			for row in registrations
+		],
+		"users": [
+			_reference_option(
+				row.name,
+				f"{row.full_name} — {row.name}" if row.full_name and row.full_name != row.name else row.name,
+			)
+			for row in users
+		],
+		"departments": [
+			_reference_option(
+				row.name,
+				row.department_name or row.name,
+				active=not bool(row.disabled),
+			)
+			for row in departments
+		],
+	}
+	write_event(
+		"Administration Read",
+		context=context,
+		metadata={"resource": "reference_options"},
+	)
+	return result
 
 
 @frappe.whitelist()
