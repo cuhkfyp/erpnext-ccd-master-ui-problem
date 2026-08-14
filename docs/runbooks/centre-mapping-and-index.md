@@ -10,8 +10,16 @@
 4. Add active aliases for every source centre code. An alias can be constrained
    to one source profile. Ambiguous aliases fail closed.
 5. In each existing CCD Registration field mapping, map the authoritative centre
-   value into hidden `CCD Master.ccd_portal_centre_key`. Do not derive it from
-   fuzzy matches, names, user grants, ERP Departments, or network location.
+   source column to the `CCD Portal Canonical Centre Key` target
+   (`ccd_portal_centre_key`). The portal migration adds this choice to the
+   existing `CCD Field Match` dropdown without changing any saved mapping. Do
+   not derive it from fuzzy matches, names, user grants, ERP Departments, or
+   network location.
+
+If the target is absent after deployment, run the site migration and clear the
+browser/metadata cache. Do not type a registration name into a centre grant:
+`CCD Registration` identifies a source, while `CCD Portal Centre` defines an
+independent access boundary.
 
 Parser choices are exact, delimited, or bounded regular expression. For a
 legitimately shared record, the canonical value may yield more than one centre;

@@ -41,6 +41,16 @@ class RepositoryContractTests(unittest.TestCase):
 		self.assertIn('after_migrate = "ccd_portal.install.after_migrate"', hooks)
 		self.assertNotIn("ccd_portal.auth", hooks)
 
+	def test_registration_mapper_exposes_centre_key_idempotently(self):
+		patch = (
+			ROOT / "ccd_portal" / "patches" / "v1_0" / "create_ccd_master_centre_field.py"
+		).read_text(encoding="utf-8")
+		self.assertIn('MAPPING_OPTION = "ccd_portal_centre_key:', patch)
+		self.assertIn('get_meta("CCD Field Match").get_field("sys_fieldname")', patch)
+		self.assertIn('option.partition(":")[0].strip() == "ccd_portal_centre_key"', patch)
+		self.assertIn("make_property_setter(", patch)
+		self.assertIn("validate_fields_for_doctype=False", patch)
+
 	def test_raw_sync_adapter_is_server_side_only(self):
 		sync = (ROOT / "ccd_portal" / "sync.py").read_text(encoding="utf-8")
 		indexing = (ROOT / "ccd_portal" / "indexing.py").read_text(encoding="utf-8")

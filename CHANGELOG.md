@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1 - 2026-08-14
+
+- Added the governed centre-key target to the existing CCD Registration field
+  mapping dropdown through an idempotent system-generated property setter.
+- Preserved all existing registration mappings and kept the portal disabled.
+
 ## 0.1.0 - 2026-08-14
 
 - Added the disabled-by-default standalone `/ccd-portal` Vue 3/Frappe UI app.
