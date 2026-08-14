@@ -1,0 +1,25 @@
+{
+ "doctype":"DocType","name":"CCD Portal Correction Request","module":"CCD Portal","autoname":"hash","allow_rename":0,
+ "field_order":["portal_record","portal_record_id","requester","requester_authority","centre","status","policy_version","reason","changed_fields","encrypted_changes","changes_digest","source_snapshot_digest","submitted_source_modified","reviewed_by","reviewed_on","decision_reason","approved_source_modified","reconciled_on"],
+ "fields":[
+  {"fieldname":"portal_record","fieldtype":"Link","label":"Portal Record","options":"CCD Portal Record","reqd":1},
+  {"fieldname":"portal_record_id","fieldtype":"Data","label":"Opaque Portal Record ID","reqd":1,"in_list_view":1},
+  {"fieldname":"requester","fieldtype":"Link","label":"Requester","options":"User","reqd":1,"in_list_view":1},
+  {"fieldname":"requester_authority","fieldtype":"Data","label":"Requester Authority","reqd":1},
+  {"fieldname":"centre","fieldtype":"Link","label":"Decision Centre","options":"CCD Portal Centre","reqd":1,"in_list_view":1},
+  {"fieldname":"status","fieldtype":"Select","label":"Status","options":"Proposed\nApproved\nRejected\nApplied\nStale\nNeeds Review","reqd":1,"in_list_view":1},
+  {"fieldname":"policy_version","fieldtype":"Data","label":"Policy Version","reqd":1},
+  {"fieldname":"reason","fieldtype":"Small Text","label":"Correction Reason","reqd":1},
+  {"fieldname":"changed_fields","fieldtype":"Data","label":"Changed Fields","reqd":1},
+  {"fieldname":"encrypted_changes","fieldtype":"Long Text","label":"Encrypted Proposed Values","reqd":1,"hidden":1},
+  {"fieldname":"changes_digest","fieldtype":"Data","label":"Changes Digest","reqd":1,"hidden":1},
+  {"fieldname":"source_snapshot_digest","fieldtype":"Data","label":"Source Snapshot Digest","reqd":1,"hidden":1},
+  {"fieldname":"submitted_source_modified","fieldtype":"Datetime","label":"Source Modified at Submission","reqd":1},
+  {"fieldname":"reviewed_by","fieldtype":"Link","label":"Reviewed By","options":"User","read_only":1},
+  {"fieldname":"reviewed_on","fieldtype":"Datetime","label":"Reviewed On","read_only":1},
+  {"fieldname":"decision_reason","fieldtype":"Small Text","label":"Decision Reason","read_only":1},
+  {"fieldname":"approved_source_modified","fieldtype":"Datetime","label":"Source Modified at Approval","read_only":1},
+  {"fieldname":"reconciled_on","fieldtype":"Datetime","label":"Reconciled On","read_only":1}
+ ],
+ "permissions":[{"role":"System Manager","read":1}],"sort_field":"creation","sort_order":"DESC","index_web_pages_for_search":0
+}

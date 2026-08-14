@@ -1,0 +1,5 @@
+{
+ "doctype":"DocType","name":"CCD Portal Pilot User","module":"CCD Portal","istable":1,"editable_grid":1,
+ "field_order":["user"],"fields":[{"fieldname":"user","fieldtype":"Link","label":"User","options":"User","reqd":1,"in_list_view":1}],
+ "permissions":[],"index_web_pages_for_search":0
+}

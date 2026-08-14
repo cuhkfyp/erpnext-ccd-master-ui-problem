@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="CCD Portal">
+  <rect width="48" height="48" rx="12" fill="#d5eadc"/>
+  <path d="M24 9c7 0 12 4 12 10v6c0 8-5 12-12 15-7-3-12-7-12-15v-6c0-6 5-10 12-10Z" fill="#1d5a3c"/>
+  <path d="M18 24h12M24 18v12" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,13 @@
+{
+ "doctype":"DocType","name":"CCD Portal Source Profile","module":"CCD Portal","autoname":"field:profile_code","naming_rule":"By fieldname","allow_rename":0,
+ "field_order":["profile_code","source_registration","parser_type","delimiter","parser_pattern","active"],
+ "fields":[
+  {"fieldname":"profile_code","fieldtype":"Data","label":"Profile Code","reqd":1,"unique":1,"in_list_view":1},
+  {"fieldname":"source_registration","fieldtype":"Link","label":"CCD Registration","options":"CCD Registration","reqd":1,"unique":1,"in_list_view":1},
+  {"fieldname":"parser_type","fieldtype":"Select","label":"Centre Key Parser","options":"Exact\nDelimited\nRegular Expression","default":"Exact","reqd":1},
+  {"fieldname":"delimiter","fieldtype":"Data","label":"Delimiter","depends_on":"eval:doc.parser_type=='Delimited'"},
+  {"fieldname":"parser_pattern","fieldtype":"Data","label":"Regular Expression","depends_on":"eval:doc.parser_type=='Regular Expression'"},
+  {"fieldname":"active","fieldtype":"Check","label":"Active","default":"1","in_list_view":1}
+ ],
+ "permissions":[{"role":"System Manager","create":1,"read":1,"write":1}],"track_changes":1,"index_web_pages_for_search":0
+}

@@ -1,0 +1,5 @@
+[pre_model_sync]
+
+[post_model_sync]
+ccd_portal.patches.v1_0.create_ccd_master_centre_field
+ccd_portal.patches.v1_0.add_database_indexes

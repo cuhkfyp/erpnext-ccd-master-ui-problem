@@ -1,0 +1,13 @@
+{
+ "doctype":"DocType","name":"CCD Portal Policy","module":"CCD Portal","autoname":"field:policy_version","naming_rule":"By fieldname","allow_rename":0,
+ "field_order":["policy_version","title","status","activated_by","activated_on","fields"],
+ "fields":[
+  {"fieldname":"policy_version","fieldtype":"Data","label":"Policy Version","reqd":1,"unique":1,"in_list_view":1},
+  {"fieldname":"title","fieldtype":"Data","label":"Title","reqd":1,"in_list_view":1},
+  {"fieldname":"status","fieldtype":"Select","label":"Status","options":"Draft\nActive\nRetired","default":"Draft","reqd":1,"read_only":1,"in_list_view":1},
+  {"fieldname":"activated_by","fieldtype":"Link","label":"Activated By","options":"User","read_only":1},
+  {"fieldname":"activated_on","fieldtype":"Datetime","label":"Activated On","read_only":1},
+  {"fieldname":"fields","fieldtype":"Table","label":"Field Rules","options":"CCD Portal Field Policy","reqd":1}
+ ],
+ "permissions":[{"role":"System Manager","create":1,"read":1}],"track_changes":1,"index_web_pages_for_search":0
+}

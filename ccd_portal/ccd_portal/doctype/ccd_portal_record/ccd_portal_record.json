@@ -1,0 +1,14 @@
+{
+ "doctype":"DocType","name":"CCD Portal Record","module":"CCD Portal","autoname":"hash","allow_rename":0,
+ "field_order":["portal_record_id","ccd_master_record","source_registration","source_key_digest","source_modified","active","last_indexed_on"],
+ "fields":[
+  {"fieldname":"portal_record_id","fieldtype":"Data","label":"Opaque Portal Record ID","reqd":1,"unique":1,"in_list_view":1},
+  {"fieldname":"ccd_master_record","fieldtype":"Data","label":"CCD Master Record","reqd":1,"hidden":1,"read_only":1},
+  {"fieldname":"source_registration","fieldtype":"Data","label":"Source Registration","hidden":1,"read_only":1},
+  {"fieldname":"source_key_digest","fieldtype":"Data","label":"Source Key Digest","hidden":1,"read_only":1},
+  {"fieldname":"source_modified","fieldtype":"Datetime","label":"Source Modified","read_only":1},
+  {"fieldname":"active","fieldtype":"Check","label":"Active","default":"1","in_list_view":1},
+  {"fieldname":"last_indexed_on","fieldtype":"Datetime","label":"Last Indexed On","read_only":1}
+ ],
+ "permissions":[{"role":"System Manager","read":1}],"index_web_pages_for_search":0
+}

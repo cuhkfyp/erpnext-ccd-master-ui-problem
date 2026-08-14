@@ -1,0 +1,10 @@
+{
+ "doctype":"DocType","name":"CCD Portal User Profile","module":"CCD Portal","autoname":"field:user","naming_rule":"By fieldname","allow_rename":0,
+ "field_order":["user","authority","active"],
+ "fields":[
+  {"fieldname":"user","fieldtype":"Link","label":"User","options":"User","reqd":1,"unique":1,"in_list_view":1},
+  {"fieldname":"authority","fieldtype":"Select","label":"Authority","options":"Reader\nOperator\nData Steward\nAccess Administrator","reqd":1,"in_list_view":1},
+  {"fieldname":"active","fieldtype":"Check","label":"Active","default":"1","in_list_view":1}
+ ],
+ "permissions":[{"role":"System Manager","create":1,"read":1,"write":1}],"track_changes":1,"index_web_pages_for_search":0
+}

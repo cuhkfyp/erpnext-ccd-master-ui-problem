@@ -1,0 +1,17 @@
+{
+ "doctype":"DocType","name":"CCD Portal Audit Event","module":"CCD Portal","autoname":"hash","allow_rename":0,
+ "field_order":["event_type","actor","authority","outcome","portal_record_id","criteria_types","protected_digest","reason_code","request_id","event_metadata"],
+ "fields":[
+  {"fieldname":"event_type","fieldtype":"Data","label":"Event Type","reqd":1,"in_list_view":1},
+  {"fieldname":"actor","fieldtype":"Data","label":"Actor","reqd":1,"in_list_view":1},
+  {"fieldname":"authority","fieldtype":"Data","label":"Authority","reqd":1},
+  {"fieldname":"outcome","fieldtype":"Select","label":"Outcome","options":"Allowed\nDenied\nError","reqd":1,"in_list_view":1},
+  {"fieldname":"portal_record_id","fieldtype":"Data","label":"Opaque Portal Record ID"},
+  {"fieldname":"criteria_types","fieldtype":"Small Text","label":"Criteria Types","read_only":1},
+  {"fieldname":"protected_digest","fieldtype":"Data","label":"Protected Digest","read_only":1},
+  {"fieldname":"reason_code","fieldtype":"Data","label":"Reason Code"},
+  {"fieldname":"request_id","fieldtype":"Data","label":"Request ID"},
+  {"fieldname":"event_metadata","fieldtype":"Small Text","label":"Allowlisted Metadata","read_only":1}
+ ],
+ "permissions":[{"role":"System Manager","read":1}],"sort_field":"creation","sort_order":"DESC","index_web_pages_for_search":0
+}

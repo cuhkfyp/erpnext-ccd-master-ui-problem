@@ -1,0 +1,32 @@
+[
+  {
+    "ccd_reg_source": "SYNTHETIC-CENTRE-A",
+    "ccd_source_key": "SYNTHETIC-A-0001",
+    "ccd_portal_centre_key": "CENTRE-A",
+    "eng_firstname": "Avery",
+    "eng_surname": "Example",
+    "birthday": "1990-01-02",
+    "email": "avery@example.invalid",
+    "phone_num": "20000001"
+  },
+  {
+    "ccd_reg_source": "SYNTHETIC-CENTRE-B",
+    "ccd_source_key": "SYNTHETIC-B-0001",
+    "ccd_portal_centre_key": "CENTRE-B",
+    "eng_firstname": "Blair",
+    "eng_surname": "Sample",
+    "birthday": "1988-03-04",
+    "email": "blair@example.invalid",
+    "phone_num": "20000002"
+  },
+  {
+    "ccd_reg_source": "SYNTHETIC-SHARED",
+    "ccd_source_key": "SYNTHETIC-S-0001",
+    "ccd_portal_centre_key": "CENTRE-A|CENTRE-B",
+    "eng_firstname": "Casey",
+    "eng_surname": "Fixture",
+    "birthday": "1975-05-06",
+    "email": "casey@example.invalid",
+    "phone_num": "20000003"
+  }
+]

@@ -1,0 +1,17 @@
+{
+ "doctype":"DocType","name":"CCD Portal Field Policy","module":"CCD Portal","istable":1,"editable_grid":1,
+ "field_order":["fieldname","label","classification","data_kind","mask_strategy","reveal_authorities","searchable","strong_identifier","correctable","display_order"],
+ "fields":[
+  {"fieldname":"fieldname","fieldtype":"Data","label":"CCD Master Field","reqd":1,"in_list_view":1},
+  {"fieldname":"label","fieldtype":"Data","label":"Portal Label","reqd":1,"in_list_view":1},
+  {"fieldname":"classification","fieldtype":"Select","label":"Classification","options":"Identity\nContact\nDemographic\nAdministrative","reqd":1},
+  {"fieldname":"data_kind","fieldtype":"Select","label":"Data Kind","options":"Identifier\nHKID\nBirth Certificate\nStaff ID\nName\nDate\nPhone\nEmail\nText","reqd":1},
+  {"fieldname":"mask_strategy","fieldtype":"Select","label":"Mask Strategy","options":"Full\nLast 4\nEmail\nPhone\nInitials\nYear Only\nFirst Character","default":"Full","reqd":1},
+  {"fieldname":"reveal_authorities","fieldtype":"Data","label":"Reveal Authorities","description":"Comma separated: Operator,Data Steward"},
+  {"fieldname":"searchable","fieldtype":"Check","label":"Searchable","default":"0"},
+  {"fieldname":"strong_identifier","fieldtype":"Check","label":"Strong Identifier","default":"0"},
+  {"fieldname":"correctable","fieldtype":"Check","label":"Correctable","default":"0"},
+  {"fieldname":"display_order","fieldtype":"Int","label":"Display Order","default":"0"}
+ ],
+ "permissions":[],"index_web_pages_for_search":0
+}

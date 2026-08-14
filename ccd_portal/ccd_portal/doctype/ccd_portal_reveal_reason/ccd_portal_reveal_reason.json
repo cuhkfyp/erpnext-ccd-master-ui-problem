@@ -1,0 +1,11 @@
+{
+ "doctype":"DocType","name":"CCD Portal Reveal Reason","module":"CCD Portal","autoname":"field:reason_code","naming_rule":"By fieldname","allow_rename":0,
+ "field_order":["reason_code","label","display_order","active"],
+ "fields":[
+  {"fieldname":"reason_code","fieldtype":"Data","label":"Reason Code","reqd":1,"unique":1,"in_list_view":1},
+  {"fieldname":"label","fieldtype":"Data","label":"Label","reqd":1,"in_list_view":1},
+  {"fieldname":"display_order","fieldtype":"Int","label":"Display Order","default":"0"},
+  {"fieldname":"active","fieldtype":"Check","label":"Active","default":"1","in_list_view":1}
+ ],
+ "permissions":[{"role":"System Manager","create":1,"read":1,"write":1}],"track_changes":1,"index_web_pages_for_search":0
+}

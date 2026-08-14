@@ -1,0 +1,13 @@
+{
+ "doctype":"DocType","name":"CCD Portal Settings","module":"CCD Portal","issingle":1,
+ "field_order":["enabled","administrator_preview","preview_users","searches_per_hour","reveals_per_hour","reveal_ttl_seconds"],
+ "fields":[
+  {"fieldname":"enabled","fieldtype":"Check","label":"Enabled","default":"0"},
+  {"fieldname":"administrator_preview","fieldtype":"Check","label":"Administrator Preview","default":"1","read_only":1},
+  {"fieldname":"preview_users","fieldtype":"Table","label":"Preview Users","options":"CCD Portal Pilot User","description":"Environment-owned named administrators only; never export this table."},
+  {"fieldname":"searches_per_hour","fieldtype":"Int","label":"Searches per Hour","default":"60","reqd":1},
+  {"fieldname":"reveals_per_hour","fieldtype":"Int","label":"Reveals per Hour","default":"20","reqd":1},
+  {"fieldname":"reveal_ttl_seconds","fieldtype":"Int","label":"Reveal TTL Seconds","default":"120","reqd":1}
+ ],
+ "permissions":[{"role":"System Manager","read":1,"write":1}],"index_web_pages_for_search":0
+}

@@ -1,0 +1,26 @@
+[project]
+name = "ccd_portal"
+authors = [
+    {name = "HKSR", email = "digital@rehabsociety.org.hk"},
+]
+description = "Governed staff portal for targeted CCD Master access"
+requires-python = ">=3.10"
+readme = "README.md"
+dynamic = ["version"]
+dependencies = []
+
+[build-system]
+requires = ["flit_core>=3.4,<4"]
+build-backend = "flit_core.buildapi"
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "RUF", "UP", "W"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
