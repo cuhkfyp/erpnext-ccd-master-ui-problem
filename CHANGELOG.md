@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.4 - 2026-08-14
+
+- Restored native checked-state rendering for administration checkboxes after
+  the Tailwind base styles made active records appear inactive.
+
 ## 0.1.3 - 2026-08-14
 
 - Added a verified graceful Gunicorn worker reload to no-restart deployments so

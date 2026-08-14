@@ -82,6 +82,8 @@ class RepositoryContractTests(unittest.TestCase):
 		self.assertIn("def reference_options():", admin)
 		self.assertIn('"CCD Registration"', admin)
 		self.assertIn('.field input[type="checkbox"]', style)
+		self.assertIn("appearance:auto", style)
+		self.assertIn("-webkit-appearance:checkbox", style)
 
 	def test_built_assets_have_no_source_maps(self):
 		assets = ROOT / "ccd_portal" / "public" / "ccd-portal" / "assets"

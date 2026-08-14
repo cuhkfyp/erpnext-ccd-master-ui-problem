@@ -27,7 +27,7 @@ button, input, select, textarea { font: inherit; }
 .field { display:flex; flex-direction:column; gap:.35rem; }
 .field label { color:#405148; font-size:.8rem; font-weight:600; }
 .field input, .field select, .field textarea { width:100%; border:1px solid #cbd7d0; border-radius:.55rem; padding:.62rem .7rem; background:white; color:#17211b; }
-.field input[type="checkbox"] { width:1.15rem; height:1.15rem; margin:0; padding:0; accent-color:#1d5a3c; }
+.field input[type="checkbox"] { width:1.15rem; height:1.15rem; margin:0; padding:0; border-radius:.2rem; appearance:auto; -webkit-appearance:checkbox; accent-color:#1d5a3c; }
 .field-label { color:#405148; font-size:.8rem; font-weight:600; }
 .check-control { min-height:2.75rem; display:flex; align-items:center; gap:.55rem; border:1px solid #cbd7d0; border-radius:.55rem; padding:.62rem .7rem; background:#f9fbfa; cursor:pointer; }
 .check-control span { color:#263c31; font-size:.9rem; font-weight:500; }
