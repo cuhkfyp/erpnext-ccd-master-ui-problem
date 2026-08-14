@@ -6,5 +6,6 @@ no_cache = 1
 def get_context(context):
 	context.boot = {
 		"csrf_token": frappe.sessions.get_csrf_token(),
+		"ccd_portal_authenticated": frappe.session.user != "Guest",
 	}
 	return context

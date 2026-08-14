@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.5 - 2026-08-14
+
+- Distinguished logged-out Guests from authenticated accounts denied by the
+  disabled feature flag, preventing the misleading sign-in redirect loop.
+- Offered denied authenticated users a return to Desk while preserving the
+  normal Frappe login redirect for Guests.
+
 ## 0.1.4 - 2026-08-14
 
 - Restored native checked-state rendering for administration checkboxes after

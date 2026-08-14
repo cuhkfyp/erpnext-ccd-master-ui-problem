@@ -6,7 +6,7 @@
     </header>
     <main class="layout">
       <div v-if="boot?.preview_mode" class="notice">{{ __('Administrator preview — the staff feature flag is disabled.') }}</div>
-      <div v-if="error" class="error" role="alert">{{ error }} <a v-if="unauthenticated" href="/login?redirect-to=%2Fccd-portal">{{ __('Sign in') }}</a></div>
+      <div v-if="error" class="error" role="alert">{{ error }} <a v-if="unauthenticated" href="/login?redirect-to=%2Fccd-portal">{{ __('Sign in') }}</a><a v-else href="/app">{{ __('Return to Desk') }}</a></div>
       <div v-if="message" class="success" role="status">{{ message }}</div>
       <section v-if="loading" class="card"><p>{{ __('Loading governed access profile…') }}</p></section>
       <AdminPanel v-else-if="boot?.is_access_administrator" :can-activate-policy="boot.can_activate_policy" />
@@ -80,6 +80,7 @@ import { call } from "./api";
 import AdminPanel from "./components/AdminPanel.vue";
 
 const __ = (text) => text;
+const sessionAuthenticated = Boolean(window.ccd_portal_authenticated);
 const loading = ref(true), busy = ref(false), error = ref(""), message = ref(""), boot = ref(null), unauthenticated = ref(false), view = ref("search");
 const criteria = reactive([{fieldname:"",value:""}]), results = ref([]), searched = ref(false), selected = ref(null), revealed = ref(null), revealSeconds = ref(0), correctionRows = ref([]);
 const showReveal = ref(false), showCorrection = ref(false), decisionRequest = ref(null), decisionReview = ref(null);
@@ -96,7 +97,7 @@ const displayFields = computed(() => { if (!selected.value) return []; const raw
 function inputType(fieldname) { const kind=searchFields.value.find((f)=>f.fieldname===fieldname)?.data_kind; return kind==="Date"?"date":kind==="Email"?"email":"text"; }
 function clearReveal() { revealed.value=null; revealSeconds.value=0; if(revealTimer) clearTimeout(revealTimer); if(countdownTimer) clearInterval(countdownTimer); revealTimer=null; countdownTimer=null; }
 function clearSelected() { clearReveal(); selected.value=null; }
-function setError(e) { error.value=e.message || __("The request could not be completed."); unauthenticated.value=e.status===401 || e.status===403; }
+function setError(e) { error.value=e.message || __("The request could not be completed."); unauthenticated.value=!sessionAuthenticated && (e.status===401 || e.status===403); }
 async function runSearch() { busy.value=true; error.value=""; message.value=""; clearSelected(); try { const data=await call("ccd_portal.api.search",{criteria:criteria.map((row)=>({...row}))}); results.value=data.results; searched.value=true; criteria.forEach((row)=>row.value=""); } catch(e){setError(e);} finally{busy.value=false;} }
 async function openDetail(id) { busy.value=true; error.value=""; clearReveal(); try { selected.value=await call("ccd_portal.api.detail",{record_id:id}); selected.value && window.scrollTo({top:document.body.scrollHeight,behavior:"smooth"}); } catch(e){setError(e);} finally{busy.value=false;} }
 async function doReveal() { busy.value=true; error.value=""; try { revealed.value=await call("ccd_portal.api.reveal",{record_id:selected.value.id,...revealForm}); revealSeconds.value=revealed.value.expires_in; showReveal.value=false; revealForm.reason_code=""; revealForm.context_note=""; countdownTimer=setInterval(()=>revealSeconds.value=Math.max(0,revealSeconds.value-1),1000); revealTimer=setTimeout(clearReveal,revealed.value.expires_in*1000); } catch(e){setError(e);} finally{busy.value=false;} }

@@ -71,6 +71,15 @@ class RepositoryContractTests(unittest.TestCase):
 		for browser_store in ("localStorage", "sessionStorage", "indexedDB"):
 			self.assertNotIn(browser_store, source)
 
+	def test_login_action_distinguishes_guest_from_denied_user(self):
+		page = (ROOT / "ccd_portal" / "www" / "ccd_portal.py").read_text(encoding="utf-8")
+		app = (ROOT / "frontend" / "src" / "App.vue").read_text(encoding="utf-8")
+		self.assertIn('"ccd_portal_authenticated": frappe.session.user != "Guest"', page)
+		self.assertIn("Boolean(window.ccd_portal_authenticated)", app)
+		self.assertIn("!sessionAuthenticated && (e.status===401 || e.status===403)", app)
+		self.assertIn('/login?redirect-to=%2Fccd-portal', app)
+		self.assertIn('href="/app"', app)
+
 	def test_admin_forms_use_guided_references_and_parser_fields(self):
 		panel = (ROOT / "frontend" / "src" / "components" / "AdminPanel.vue").read_text(encoding="utf-8")
 		admin = (ROOT / "ccd_portal" / "admin.py").read_text(encoding="utf-8")
