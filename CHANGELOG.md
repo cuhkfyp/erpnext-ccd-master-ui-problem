@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.11 - 2026-08-15
+
+- Replaced the guest bootstrap failure with a clean sign-in card and prevented
+  unauthenticated browsers from calling the session-only bootstrap method.
+- Filtered raw HTML and internal Frappe method details from frontend error
+  messages.
+
 ## 0.1.10 - 2026-08-15
 
 - Added a read-only **View details** action and clickable version for every

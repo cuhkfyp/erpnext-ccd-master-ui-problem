@@ -1,11 +1,17 @@
+function safeMessage(value, fallback) {
+  if (typeof value !== "string" || !value.trim() || value.length > 500) return fallback;
+  if (/[<>]/.test(value) || /(?:Traceback|Failed to get method|ccd_portal\.|frappe\.)/i.test(value)) return fallback;
+  return value;
+}
+
 function messageFrom(error, fallback) {
   try {
     const messages = JSON.parse(error?._server_messages || "[]");
-    if (messages.length) return JSON.parse(messages[0]).message || fallback;
+    if (messages.length) return safeMessage(JSON.parse(messages[0]).message, fallback);
   } catch (_) {
     // Return the allowlisted fallback below.
   }
-  return error?.message || fallback;
+  return safeMessage(error?.message, fallback);
 }
 
 export async function call(method, args = {}, post = true) {

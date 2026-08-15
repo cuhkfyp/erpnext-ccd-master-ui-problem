@@ -84,11 +84,16 @@ class RepositoryContractTests(unittest.TestCase):
 	def test_login_action_distinguishes_guest_from_denied_user(self):
 		page = (ROOT / "ccd_portal" / "www" / "ccd_portal.py").read_text(encoding="utf-8")
 		app = (ROOT / "frontend" / "src" / "App.vue").read_text(encoding="utf-8")
+		client = (ROOT / "frontend" / "src" / "api.js").read_text(encoding="utf-8")
 		self.assertIn('"ccd_portal_authenticated": frappe.session.user != "Guest"', page)
 		self.assertIn("Boolean(window.ccd_portal_authenticated)", app)
-		self.assertIn("!sessionAuthenticated && (e.status===401 || e.status===403)", app)
+		self.assertIn("if(!sessionAuthenticated){loading.value=false;return;}", app)
+		self.assertIn('unauthenticated = ref(!sessionAuthenticated)', app)
+		self.assertIn("Please sign in to access the CCD Staff Portal.", app)
 		self.assertIn('/login?redirect-to=%2Fccd-portal', app)
 		self.assertIn('href="/app"', app)
+		self.assertIn("Failed to get method", client)
+		self.assertIn("ccd_portal\\.", client)
 
 	def test_admin_forms_use_guided_references_and_parser_fields(self):
 		panel = (ROOT / "frontend" / "src" / "components" / "AdminPanel.vue").read_text(encoding="utf-8")
