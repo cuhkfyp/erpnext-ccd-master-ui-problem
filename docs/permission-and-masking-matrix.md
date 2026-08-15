@@ -48,6 +48,13 @@ the previous version; active and retired documents are immutable. The record
 detail groups Contact-classified rules into residential address, postal
 address, phone/email, and contact-person sections.
 
+Access Administrators can inspect every Draft, Active, or Retired version in the
+portal **Policies** tab by clicking its version or **View details**. The
+read-only table shows every governed field rule and its order, classification,
+mask, search/strong-ID flags, reveal authorities, and correction flag. Only a
+Draft exposes the separate edit action; Active and Retired versions remain
+immutable.
+
 Policy inclusion controls whether a field may be returned; it does not create
 or copy a value. A contact field remains empty until the authoritative source
 query exposes its column, the submitted registration has an approved mapping to

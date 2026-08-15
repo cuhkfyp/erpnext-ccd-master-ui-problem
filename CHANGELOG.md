@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.10 - 2026-08-15
+
+- Added a read-only **View details** action and clickable version for every
+  Draft, Active, and Retired policy in the portal Policies tab.
+- Rendered policy field rules as a readable governance matrix while preserving
+  immutability for Active and Retired versions.
+
 ## 0.1.9 - 2026-08-15
 
 - Added a governed Contact Information tab to masked record detail, grouped into

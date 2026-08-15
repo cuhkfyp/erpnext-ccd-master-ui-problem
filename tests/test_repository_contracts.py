@@ -106,6 +106,9 @@ class RepositoryContractTests(unittest.TestCase):
 		self.assertIn('.field input[type="checkbox"]', style)
 		self.assertIn("appearance:auto", style)
 		self.assertIn("-webkit-appearance:checkbox", style)
+		self.assertIn("View details", panel)
+		self.assertIn("CCD Master field", panel)
+		self.assertIn("viewPolicy(row)", panel)
 
 	def test_source_assignment_supports_fixed_and_per_record_centres(self):
 		profile = json.loads(
