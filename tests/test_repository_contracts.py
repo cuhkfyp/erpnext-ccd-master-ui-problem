@@ -149,6 +149,10 @@ class RepositoryContractTests(unittest.TestCase):
 		self.assertIn("npm run check", deploy)
 		self.assertIn("npm run build", deploy)
 		self.assertIn(".ccd-portal-build.", deploy)
+		self.assertIn('build_output="$build_stage/output"', deploy)
+		self.assertIn("-type d -exec chmod 0755", deploy)
+		self.assertIn("-type f -exec chmod 0644", deploy)
+		self.assertIn("chown -R frappe:frappe", deploy)
 		self.assertIn('awk "1" "$file"', deploy)
 
 	def test_sshmount_recovery_is_layer_aware_and_bounded(self):

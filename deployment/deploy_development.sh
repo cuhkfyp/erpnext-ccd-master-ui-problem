@@ -84,16 +84,24 @@ if (( ! RUNTIME_ONLY )); then
 	docker exec -u frappe frappe_docker-backend-1 sed -i 's/[[:space:]]\+$//' \
 		"$APP_IN_CONTAINER/$APP_NAME/public/ccd-portal/index.html" \
 		"$APP_IN_CONTAINER/$APP_NAME/www/ccd_portal.html"
+	docker exec -u root frappe_docker-backend-1 find \
+		"$APP_IN_CONTAINER/$APP_NAME/public/ccd-portal" -type d -exec chmod 0755 '{}' '+'
+	docker exec -u root frappe_docker-backend-1 find \
+		"$APP_IN_CONTAINER/$APP_NAME/public/ccd-portal" -type f -exec chmod 0644 '{}' '+'
 	build_stage="$(mktemp -d "$VOLUME_ROOT/.ccd-portal-build.XXXXXX")"
+	build_output="$build_stage/output"
+	install -d -m 0755 "$build_output"
 	docker cp \
 		"frappe_docker-backend-1:$APP_IN_CONTAINER/$APP_NAME/public/ccd-portal/." \
-		"$build_stage/"
-	rsync -a --delete "$build_stage/" "$PERSISTENT_APP/$APP_NAME/public/ccd-portal/"
+		"$build_output/"
+	find "$build_output" -type d -exec chmod 0755 '{}' '+'
+	find "$build_output" -type f -exec chmod 0644 '{}' '+'
+	rsync -a --delete "$build_output/" "$PERSISTENT_APP/$APP_NAME/public/ccd-portal/"
 	docker cp \
 		"frappe_docker-backend-1:$APP_IN_CONTAINER/$APP_NAME/www/ccd_portal.html" \
 		"$PERSISTENT_APP/$APP_NAME/www/ccd_portal.html"
 	if [[ "$APP_ROOT" != "$PERSISTENT_APP" ]]; then
-		rsync -a --delete "$build_stage/" "$APP_ROOT/$APP_NAME/public/ccd-portal/"
+		rsync -a --delete "$build_output/" "$APP_ROOT/$APP_NAME/public/ccd-portal/"
 		cp -p "$PERSISTENT_APP/$APP_NAME/www/ccd_portal.html" \
 			"$APP_ROOT/$APP_NAME/www/ccd_portal.html"
 	fi
@@ -146,11 +154,20 @@ fi
 
 asset_stage="$(mktemp -d "$VOLUME_ROOT/.ccd-portal-assets.XXXXXX")"
 trap 'rm -rf -- "$asset_stage"' EXIT
-mkdir -p "$asset_stage/$APP_NAME"
+install -d -m 0755 "$asset_stage/$APP_NAME"
 if docker cp "frappe_docker-backend-1:$APP_IN_CONTAINER/$APP_NAME/public/." \
 	"$asset_stage/$APP_NAME/"; then
-	docker exec frappe_docker-frontend-1 mkdir -p "/home/frappe/frappe-bench/sites/assets/$APP_NAME"
+	find "$asset_stage/$APP_NAME" -type d -exec chmod 0755 '{}' '+'
+	find "$asset_stage/$APP_NAME" -type f -exec chmod 0644 '{}' '+'
+	docker exec -u root frappe_docker-frontend-1 install -d -m 0755 \
+		-o frappe -g frappe "/home/frappe/frappe-bench/sites/assets/$APP_NAME"
 	docker cp "$asset_stage/$APP_NAME/." "frappe_docker-frontend-1:/home/frappe/frappe-bench/sites/assets/$APP_NAME/"
+	docker exec -u root frappe_docker-frontend-1 chown -R frappe:frappe \
+		"/home/frappe/frappe-bench/sites/assets/$APP_NAME"
+	docker exec -u root frappe_docker-frontend-1 find \
+		"/home/frappe/frappe-bench/sites/assets/$APP_NAME" -type d -exec chmod 0755 '{}' '+'
+	docker exec -u root frappe_docker-frontend-1 find \
+		"/home/frappe/frappe-bench/sites/assets/$APP_NAME" -type f -exec chmod 0644 '{}' '+'
 fi
 
 if (( RESTART )); then

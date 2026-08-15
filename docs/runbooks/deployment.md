@@ -85,6 +85,13 @@ but must not touch Docker or the site, synchronize only the host recovery copy:
   `/tmp`. Portal asset staging is therefore created under
   `/root/erpnext_docker_volume/.ccd-portal-assets.*`, which is visible to Docker,
   and is removed automatically.
+- A blank portal immediately after F5, while `/ccd-portal` itself returns 200,
+  can mean that its hashed JavaScript and CSS URLs return 404 because a staging
+  directory's private `0700` mode was copied into nginx's asset path. Check the
+  two asset URLs named in the page HTML. The deployment/recovery script now
+  forces portal directories to `0755`, files to `0644`, and ownership to
+  `frappe:frappe`; it does not change permissions on any unrelated app. Re-run
+  `deploy_ccd_portal.sh --runtime-only` and require both assets to return 200.
 - The app is registered through a local `ccd_portal.pth` in each current Frappe
   runtime. This avoids a network-dependent editable install and is recreated by
   `deploy_ccd_portal.sh --runtime-only` after container replacement.

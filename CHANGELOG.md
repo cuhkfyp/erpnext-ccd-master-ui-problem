@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.7 - 2026-08-15
+
+- Fixed a post-deployment blank screen caused by private staging-directory
+  permissions being propagated to the nginx portal asset directory.
+- Normalized only CCD Portal asset directories/files to `0755`/`0644` during
+  normal deployments and container-recovery deployments.
+
 ## 0.1.6 - 2026-08-15
 
 - Added an audited Sources workflow for fixed single/multiple-centre assignments
