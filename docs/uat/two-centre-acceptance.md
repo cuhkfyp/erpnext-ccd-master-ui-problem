@@ -10,6 +10,11 @@ System Manager. Every profile has exactly one authority. Create records that are
 A-only, B-only, legitimately A+B, unmapped, deleted/reinserted, correction-stale,
 and cross-centre fuzzy-linked without a centre relation.
 
+Exercise both source assignment modes: one fixed single-centre source, one fixed
+A+B source where every record is legitimately shared, and one mixed source whose
+per-record keys produce A-only, B-only, and delimited A+B records. Confirm that a
+fixed assignment never spreads to a different registration.
+
 ## Matrix
 
 For each row, retain only pass/fail evidence and opaque IDs.
@@ -35,6 +40,9 @@ For each row, retain only pass/fail evidence and opaque IDs.
 | Multi-centre user searches A and B | Sees only explicit A/B intersection |
 | Any user searches fuzzy-linked cross-centre record | Fuzzy link provides no access |
 | Shared A+B record | Accessible independently through valid A or B grant |
+| Fixed A source | Every record relates only to A without changing its submitted registration |
+| Fixed A+B source | Every record receives independent A and B relations; the centres remain unrelated |
+| Mixed per-record source | Each row follows only its exact/delimited authoritative centre key |
 | Unmapped/inactive-key record | Invisible; aggregate coverage reports gap |
 | SQL/XSS payload in criteria/context | Parameterized/escaped; no execution or stored script |
 | Cross-site unsafe request without CSRF | Rejected by Frappe |

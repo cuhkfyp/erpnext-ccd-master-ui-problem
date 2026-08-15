@@ -6,25 +6,33 @@
    in the site's private configuration. Never reuse an API key or commit it.
 2. Create canonical `CCD Portal Centre` rows. Optional ERP Departments are
    descriptive links and never grant access.
-3. Create one active `CCD Portal Source Profile` for each `ccd_reg_source`.
-4. Add active aliases for every source centre code. An alias can be constrained
-   to one source profile. Ambiguous aliases fail closed.
-5. In each existing CCD Registration field mapping, map the authoritative centre
-   source column to the `CCD Portal Canonical Centre Key` target
-   (`ccd_portal_centre_key`). The portal migration adds this choice to the
-   existing `CCD Field Match` dropdown without changing any saved mapping. Do
-   not derive it from fuzzy matches, names, user grants, ERP Departments, or
-   network location.
+3. Create one active `CCD Portal Source Profile` for each `ccd_reg_source` and
+   select exactly one centre-assignment mode:
+   - **Fixed Centres** applies every selected centre to every record from the
+     registration. Select one for a single-centre source, or several only when
+     every record is legitimately shared by all of them. This mode works with
+     submitted registrations and does not require a CCD Field Match change.
+   - **Per-record Centre Key** is required when records within one registration
+     belong to different centres. Map the authoritative source centre column to
+     `CCD Portal Canonical Centre Key` (`ccd_portal_centre_key`) in the existing
+     registration mapping. The portal migration exposes this target without
+     changing saved mappings.
+4. For per-record mode, add active aliases when a source value differs from its
+   canonical centre code. An alias can be constrained to one source profile;
+   ambiguous aliases fail closed.
+5. Never derive centre access from fuzzy matches, registration names, client
+   names, user grants, ERP Departments, or network location.
 
 If the target is absent after deployment, run the site migration and clear the
 browser/metadata cache. Do not type a registration name into a centre grant:
 `CCD Registration` identifies a source, while `CCD Portal Centre` defines an
 independent access boundary.
 
-Parser choices are exact, delimited, or bounded regular expression. For a
-legitimately shared record, the canonical value may yield more than one centre;
-the indexer creates an independent relation for each. This never relates the
-centres themselves.
+In fixed mode the selected centres are stored as governed child rows on the
+source profile. In per-record mode, parser choices are exact, delimited, or
+bounded regular expression. For a legitimately shared record, the canonical
+value may yield more than one centre; the indexer creates an independent
+relation for each. This never relates the centres themselves.
 
 Use **Exact** when the synchronized value is already one complete centre code,
 such as `12345`. Exact requires neither Delimiter nor Pattern. Use **Delimited**
@@ -43,6 +51,16 @@ exist:
 bench --site <site> execute ccd_portal.admin.refresh_index \
   --kwargs '{"reason":"Initial governed index build"}'
 ```
+
+A System Manager who is also the portal Access Administrator can instead enter
+a reason and choose **Refresh index** for one saved source in the portal Sources
+tab. Source-specific refresh is preferred while configuring a cohort because it
+does not process unrelated registrations.
+
+Saving a source assignment immediately deactivates the existing centre
+relations for that source. This deliberately makes its records inaccessible
+until the audited refresh succeeds, so an old assignment cannot remain usable
+during a configuration change.
 
 The post-sync integration must call the non-whitelisted server-side method
 `ccd_portal.sync.after_agent_sync(source, source_keys, deleted_source_keys)`

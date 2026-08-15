@@ -1,0 +1,8 @@
+{
+ "doctype":"DocType","name":"CCD Portal Source Fixed Centre","module":"CCD Portal","istable":1,"editable_grid":1,
+ "field_order":["centre"],
+ "fields":[
+  {"fieldname":"centre","fieldtype":"Link","label":"Centre","options":"CCD Portal Centre","reqd":1,"in_list_view":1}
+ ],
+ "permissions":[],"index_web_pages_for_search":0
+}

@@ -18,6 +18,12 @@ creates the site-local HMAC secret only when missing, without printing it. It
 does not configure centres, aliases, grants, ordinary-user identities, activate
 the draft policy, generate indexes, or enable the feature flag.
 
+For a normal deployment, the script installs locked frontend dependencies in
+the existing backend container, runs the Vue type check and production build,
+and copies the generated no-source-map assets back to the repository and the
+persistent recovery copy. A later container recreation therefore cannot revert
+the portal to an older UI bundle, and the host does not need Node/npm.
+
 ### Docker persistence and recovery
 
 The Python application directories inside the Frappe containers are disposable.

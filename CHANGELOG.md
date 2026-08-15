@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.6 - 2026-08-15
+
+- Added an audited Sources workflow for fixed single/multiple-centre assignments
+  that works without modifying submitted CCD Registrations.
+- Preserved per-record Exact, Delimited, and bounded Regex mapping for mixed
+  sources, with fail-closed validation and independent centre relations.
+- Source-assignment changes now invalidate old centre relations immediately and
+  remain inaccessible until an audited index refresh succeeds.
+- Added a reasoned, source-specific index refresh action for System Managers and
+  expanded the mapping and two-centre UAT guidance.
+
 ## 0.1.5 - 2026-08-14
 
 - Distinguished logged-out Guests from authenticated accounts denied by the

@@ -86,13 +86,43 @@ class RepositoryContractTests(unittest.TestCase):
 		style = (ROOT / "frontend" / "src" / "style.css").read_text(encoding="utf-8")
 		self.assertIn('reference:"centres"', panel)
 		self.assertIn('reference:"profiles"', panel)
-		self.assertIn('showWhen:{parser_type:"Regular Expression"}', panel)
+		self.assertIn(
+			'showWhen:{assignment_mode:"Per-record Centre Key",parser_type:"Regular Expression"}',
+			panel,
+		)
 		self.assertIn("Enter a bounded pattern, or choose Exact", panel)
 		self.assertIn("def reference_options():", admin)
 		self.assertIn('"CCD Registration"', admin)
 		self.assertIn('.field input[type="checkbox"]', style)
 		self.assertIn("appearance:auto", style)
 		self.assertIn("-webkit-appearance:checkbox", style)
+
+	def test_source_assignment_supports_fixed_and_per_record_centres(self):
+		profile = json.loads(
+			(
+				ROOT
+				/ "ccd_portal"
+				/ "ccd_portal"
+				/ "doctype"
+				/ "ccd_portal_source_profile"
+				/ "ccd_portal_source_profile.json"
+			).read_text()
+		)
+		fields = {field["fieldname"]: field for field in profile["fields"]}
+		self.assertEqual(fields["assignment_mode"]["default"], "Per-record Centre Key")
+		self.assertEqual(fields["fixed_centres"]["options"], "CCD Portal Source Fixed Centre")
+
+		panel = (ROOT / "frontend" / "src" / "components" / "AdminPanel.vue").read_text()
+		admin = (ROOT / "ccd_portal" / "admin.py").read_text()
+		indexing = (ROOT / "ccd_portal" / "indexing.py").read_text()
+		self.assertIn('options:["Fixed Centres","Per-record Centre Key"]', panel)
+		self.assertIn('type:"multiselect"', panel)
+		self.assertIn('ccd_portal.admin.refresh_index', panel)
+		self.assertIn('"fixed_centres_display"', admin)
+		self.assertIn("def _invalidate_source_relations", admin)
+		self.assertIn('"index_refresh_required": resource == "source_profiles"', admin)
+		self.assertIn('profile["assignment_mode"] == "Fixed Centres"', indexing)
+		self.assertIn('"reason": "fixed_centres"', indexing)
 
 	def test_built_assets_have_no_source_maps(self):
 		assets = ROOT / "ccd_portal" / "public" / "ccd-portal" / "assets"
@@ -115,6 +145,10 @@ class RepositoryContractTests(unittest.TestCase):
 		self.assertIn('mktemp -d "$VOLUME_ROOT/.ccd-portal-assets.', deploy)
 		self.assertIn("ccd_portal.pth", deploy)
 		self.assertNotIn("pip install", deploy)
+		self.assertIn("npm ci --no-audit --no-fund", deploy)
+		self.assertIn("npm run check", deploy)
+		self.assertIn("npm run build", deploy)
+		self.assertIn(".ccd-portal-build.", deploy)
 		self.assertIn('awk "1" "$file"', deploy)
 
 	def test_sshmount_recovery_is_layer_aware_and_bounded(self):

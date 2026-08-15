@@ -14,10 +14,20 @@ def _source_profile(source: str) -> dict | None:
 	row = frappe.db.get_value(
 		"CCD Portal Source Profile",
 		{"source_registration": source, "active": 1},
-		["name", "parser_type", "delimiter", "parser_pattern"],
+		["name", "assignment_mode", "parser_type", "delimiter", "parser_pattern"],
 		as_dict=True,
 	)
-	return dict(row) if row else None
+	if not row:
+		return None
+	profile = dict(row)
+	profile["assignment_mode"] = profile.get("assignment_mode") or "Per-record Centre Key"
+	profile["fixed_centres"] = frappe.get_all(
+		"CCD Portal Source Fixed Centre",
+		filters={"parent": row.name, "parenttype": "CCD Portal Source Profile", "parentfield": "fixed_centres"},
+		pluck="centre",
+		order_by="idx asc",
+	)
+	return profile
 
 
 def _parse_centre_keys(raw_value: str, profile: dict) -> list[str]:
@@ -106,8 +116,6 @@ def _deactivate_portal_record(name: str) -> None:
 
 def index_record(ccd_master_name: str) -> dict:
 	meta = frappe.get_meta("CCD Master")
-	if not meta.has_field("ccd_portal_centre_key"):
-		frappe.throw(_("CCD Master centre-key field is not installed."))
 	doc = frappe.get_doc("CCD Master", ccd_master_name)
 	if not doc.ccd_reg_source or not doc.ccd_source_key:
 		return {"status": "unmapped", "reason": "missing_source_identity"}
@@ -136,10 +144,26 @@ def index_record(ccd_master_name: str) -> dict:
 	if not profile:
 		return {"status": "unmapped", "record": record.name, "reason": "source_profile"}
 
-	parsed = _parse_centre_keys(doc.get("ccd_portal_centre_key"), profile)
-	centres = sorted({centre for key in parsed if (centre := _resolve_centre(key, profile))})
-	if not centres or len(centres) != len(set(parsed)):
-		return {"status": "unmapped", "record": record.name, "reason": "centre_alias"}
+	if profile["assignment_mode"] == "Fixed Centres":
+		configured = sorted(set(profile["fixed_centres"]))
+		centres = sorted(
+			frappe.get_all(
+				"CCD Portal Centre",
+				filters={"name": ["in", configured], "active": 1},
+				pluck="name",
+			)
+		) if configured else []
+		if not centres or centres != configured:
+			return {"status": "unmapped", "record": record.name, "reason": "fixed_centres"}
+		provenance = f"Fixed centres from source profile {profile['name']}"
+	else:
+		if not meta.has_field("ccd_portal_centre_key"):
+			frappe.throw(_("CCD Master centre-key field is not installed."))
+		parsed = _parse_centre_keys(doc.get("ccd_portal_centre_key"), profile)
+		centres = sorted({centre for key in parsed if (centre := _resolve_centre(key, profile))})
+		if not centres or len(centres) != len(set(parsed)):
+			return {"status": "unmapped", "record": record.name, "reason": "centre_alias"}
+		provenance = f"Centre key parsed by source profile {profile['name']}"
 
 	for centre in centres:
 		frappe.get_doc(
@@ -147,7 +171,7 @@ def index_record(ccd_master_name: str) -> dict:
 				"doctype": "CCD Portal Record Centre",
 				"portal_record": record.name,
 				"centre": centre,
-				"provenance": f"Source profile {profile['name']}",
+				"provenance": provenance,
 				"active": 1,
 			}
 		).insert(ignore_permissions=True)

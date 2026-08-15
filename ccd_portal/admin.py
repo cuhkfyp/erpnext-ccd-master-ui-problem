@@ -27,8 +27,26 @@ RESOURCE_FIELDS = {
 	),
 	"source_profiles": (
 		"CCD Portal Source Profile",
-		("profile_code", "source_registration", "parser_type", "delimiter", "parser_pattern", "active"),
-		("name", "profile_code", "source_registration", "parser_type", "delimiter", "parser_pattern", "active"),
+		(
+			"profile_code",
+			"source_registration",
+			"assignment_mode",
+			"fixed_centres",
+			"parser_type",
+			"delimiter",
+			"parser_pattern",
+			"active",
+		),
+		(
+			"name",
+			"profile_code",
+			"source_registration",
+			"assignment_mode",
+			"parser_type",
+			"delimiter",
+			"parser_pattern",
+			"active",
+		),
 	),
 	"profiles": (
 		"CCD Portal User Profile",
@@ -74,11 +92,34 @@ def _resource(resource: str):
 	return RESOURCE_FIELDS[resource]
 
 
+def _invalidate_source_relations(source_registration: str) -> None:
+	"""Fail closed after a source assignment changes, until its index is refreshed."""
+	frappe.db.sql(
+		"""
+		UPDATE `tabCCD Portal Record Centre` rc
+		JOIN `tabCCD Portal Record` r ON r.name = rc.portal_record
+		   SET rc.active = 0
+		 WHERE r.source_registration = %s AND rc.active = 1
+		""",
+		(source_registration,),
+	)
+
+
 @frappe.whitelist()
 def list_resources(resource: str):
 	context = _administrator_context("Administration Read")
 	doctype, _, response_fields = _resource(resource)
 	rows = frappe.get_all(doctype, fields=list(response_fields), order_by="modified desc", limit=500)
+	if resource == "source_profiles":
+		for row in rows:
+			row["assignment_mode"] = row.assignment_mode or "Per-record Centre Key"
+			row["fixed_centres"] = frappe.get_all(
+				"CCD Portal Source Fixed Centre",
+				filters={"parent": row.name, "parenttype": doctype, "parentfield": "fixed_centres"},
+				pluck="centre",
+				order_by="idx asc",
+			)
+			row["fixed_centres_display"] = ", ".join(row.fixed_centres) or "—"
 	write_event("Administration Read", context=context, metadata={"resource": resource})
 	return {"resource": resource, "rows": [dict(row) for row in rows]}
 
@@ -186,6 +227,13 @@ def upsert_resource(resource: str, values=None, name: str | None = None):
 	values = frappe.parse_json(values) if isinstance(values, str) else values
 	if not isinstance(values, dict) or set(values) - set(allowed_fields):
 		frappe.throw(_("Invalid administration values."), frappe.ValidationError)
+	audit_values = dict(values)
+	fixed_centres = None
+	if resource == "source_profiles":
+		fixed_centres = values.pop("fixed_centres", [])
+		if not isinstance(fixed_centres, list) or any(not isinstance(centre, str) for centre in fixed_centres):
+			frappe.throw(_("Select valid fixed centres."), frappe.ValidationError)
+		fixed_centres = [centre.strip() for centre in fixed_centres if centre.strip()]
 	if resource == "profiles" and values.get("authority") not in AUTHORITIES:
 		frappe.throw(_("Select exactly one valid authority."), frappe.ValidationError)
 	if name:
@@ -194,19 +242,33 @@ def upsert_resource(resource: str, values=None, name: str | None = None):
 			if fieldname in values and str(values[fieldname] or "") != str(doc.get(fieldname) or ""):
 				frappe.throw(_("Create a new record instead of changing its governed identity."))
 		doc.update(values)
+		if resource == "source_profiles":
+			doc.set("fixed_centres", [{"centre": centre} for centre in fixed_centres])
 		doc.save(ignore_permissions=True)
 		action = "Updated"
 	else:
 		doc = frappe.get_doc({"doctype": doctype, **values})
+		if resource == "source_profiles":
+			doc.set("fixed_centres", [{"centre": centre} for centre in fixed_centres])
 		doc.insert(ignore_permissions=True)
 		action = "Created"
+	if resource == "source_profiles":
+		_invalidate_source_relations(doc.source_registration)
 	write_event(
 		"Administration Change",
 		context=context,
-		protected_value=values,
-		metadata={"resource": resource, "action": action},
+		protected_value=audit_values,
+		metadata={
+			"resource": resource,
+			"action": action,
+			"index_refresh_required": resource == "source_profiles",
+		},
 	)
-	return {field: doc.get(field) for field in response_fields}
+	result = {field: doc.get(field) for field in response_fields}
+	if resource == "source_profiles":
+		result["fixed_centres"] = [row.centre for row in doc.fixed_centres]
+		result["fixed_centres_display"] = ", ".join(result["fixed_centres"]) or "—"
+	return result
 
 
 @frappe.whitelist()

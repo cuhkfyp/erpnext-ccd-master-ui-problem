@@ -75,6 +75,30 @@ for container in "${containers[@]}"; do
 done
 
 if (( ! RUNTIME_ONLY )); then
+	docker exec -u frappe -w "$APP_IN_CONTAINER/frontend" frappe_docker-backend-1 \
+		npm ci --no-audit --no-fund
+	docker exec -u frappe -w "$APP_IN_CONTAINER/frontend" frappe_docker-backend-1 \
+		npm run check
+	docker exec -u frappe -w "$APP_IN_CONTAINER/frontend" frappe_docker-backend-1 \
+		npm run build
+	docker exec -u frappe frappe_docker-backend-1 sed -i 's/[[:space:]]\+$//' \
+		"$APP_IN_CONTAINER/$APP_NAME/public/ccd-portal/index.html" \
+		"$APP_IN_CONTAINER/$APP_NAME/www/ccd_portal.html"
+	build_stage="$(mktemp -d "$VOLUME_ROOT/.ccd-portal-build.XXXXXX")"
+	docker cp \
+		"frappe_docker-backend-1:$APP_IN_CONTAINER/$APP_NAME/public/ccd-portal/." \
+		"$build_stage/"
+	rsync -a --delete "$build_stage/" "$PERSISTENT_APP/$APP_NAME/public/ccd-portal/"
+	docker cp \
+		"frappe_docker-backend-1:$APP_IN_CONTAINER/$APP_NAME/www/ccd_portal.html" \
+		"$PERSISTENT_APP/$APP_NAME/www/ccd_portal.html"
+	if [[ "$APP_ROOT" != "$PERSISTENT_APP" ]]; then
+		rsync -a --delete "$build_stage/" "$APP_ROOT/$APP_NAME/public/ccd-portal/"
+		cp -p "$PERSISTENT_APP/$APP_NAME/www/ccd_portal.html" \
+			"$APP_ROOT/$APP_NAME/www/ccd_portal.html"
+	fi
+	rm -rf -- "$build_stage"
+
 	if ! docker exec frappe_docker-backend-1 grep -qx "$APP_NAME" \
 		/home/frappe/frappe-bench/sites/apps.txt; then
 		docker exec frappe_docker-backend-1 sh -c \
@@ -139,7 +163,7 @@ else
 	echo "Runtime containers were not restarted. Use --restart only in a controlled window."
 fi
 
-echo "ccd_portal deployed to $SITE with its feature flag disabled."
+echo "ccd_portal deployed to $SITE without changing its existing feature-flag state."
 echo "The site-local HMAC secret was preserved or generated without printing it."
 echo "Configure environment-owned governance records before policy activation and index generation."
 echo "Persistent recovery source: $PERSISTENT_APP"

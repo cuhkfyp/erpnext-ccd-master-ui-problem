@@ -18,6 +18,11 @@ Grade never grants a centre. Every ordinary client-data action requires an
 active profile and an effective explicit user-centre grant. A record must have
 at least one active/effective relation intersecting those grants.
 
+Source profiles may use audited fixed centres only when every record from that
+registration belongs to all selected centres. Mixed sources require per-record
+authoritative centre keys. Changing a source assignment does not itself rebuild
+the index; a System Manager performs a separately reasoned source refresh.
+
 ## Default field policy guidance
 
 This table is guidance for an environment-owned immutable policy; activation
