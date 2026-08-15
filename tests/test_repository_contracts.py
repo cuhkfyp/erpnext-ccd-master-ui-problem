@@ -71,6 +71,16 @@ class RepositoryContractTests(unittest.TestCase):
 		for browser_store in ("localStorage", "sessionStorage", "indexedDB"):
 			self.assertNotIn(browser_store, source)
 
+	def test_masked_detail_has_governed_contact_information_groups(self):
+		app = (ROOT / "frontend" / "src" / "App.vue").read_text(encoding="utf-8")
+		install = (ROOT / "ccd_portal" / "install.py").read_text(encoding="utf-8")
+		self.assertIn("Contact Information", app)
+		self.assertIn("Residential address", app)
+		self.assertIn("Postal address", app)
+		self.assertIn("Contact persons", app)
+		for fieldname in ("res_addr1", "post_addr1", "contact1_name", "contact2_phone"):
+			self.assertIn(f'("{fieldname}"', install)
+
 	def test_login_action_distinguishes_guest_from_denied_user(self):
 		page = (ROOT / "ccd_portal" / "www" / "ccd_portal.py").read_text(encoding="utf-8")
 		app = (ROOT / "frontend" / "src" / "App.vue").read_text(encoding="utf-8")

@@ -52,7 +52,17 @@
 
           <section v-if="selected" class="card" style="margin-top:1rem">
             <div class="actions" style="justify-content:space-between;margin-top:0"><div><h2 style="margin-bottom:.2rem">{{ __('Masked record detail') }}</h2><span v-for="centre in selected.centres" :key="centre" class="pill">{{ centre }}</span></div><button class="secondary" @click="clearSelected">{{ __('Close') }}</button></div>
-            <div class="record-fields" style="margin-top:1rem"><div v-for="field in displayFields" :key="field.fieldname" class="record-field"><small>{{ field.label }}</small><strong>{{ field.value || '—' }}</strong></div></div>
+            <nav class="tabs detail-tabs" aria-label="Record detail sections">
+              <button class="tab" :class="{active:detailSection==='details'}" @click="detailSection='details'">{{ __('Details') }}</button>
+              <button v-if="contactFields.length" class="tab" :class="{active:detailSection==='contact'}" @click="detailSection='contact'">{{ __('Contact Information') }}</button>
+            </nav>
+            <div v-if="detailSection === 'details'" class="record-fields" style="margin-top:1rem"><div v-for="field in detailFields" :key="field.fieldname" class="record-field"><small>{{ field.label }}</small><strong>{{ field.value || '—' }}</strong></div></div>
+            <template v-else>
+              <section v-for="group in contactGroups" :key="group.label" class="detail-group">
+                <h3>{{ group.label }}</h3>
+                <div class="record-fields"><div v-for="field in group.fields" :key="field.fieldname" class="record-field"><small>{{ field.label }}</small><strong>{{ field.value || '—' }}</strong></div></div>
+              </section>
+            </template>
             <p v-if="revealed" class="notice" style="margin-top:1rem">{{ __('Revealed values clear automatically in') }} {{ revealSeconds }}s. {{ __('Do not copy them into notes or browser storage.') }}</p>
             <div class="actions"><button v-if="canReveal" class="primary" @click="showReveal=true">{{ __('Temporarily reveal eligible fields') }}</button><button v-if="canCorrect" class="secondary" @click="openCorrection">{{ __('Request a correction') }}</button></div>
           </section>
@@ -81,7 +91,7 @@ import AdminPanel from "./components/AdminPanel.vue";
 
 const __ = (text) => text;
 const sessionAuthenticated = Boolean(window.ccd_portal_authenticated);
-const loading = ref(true), busy = ref(false), error = ref(""), message = ref(""), boot = ref(null), unauthenticated = ref(false), view = ref("search");
+const loading = ref(true), busy = ref(false), error = ref(""), message = ref(""), boot = ref(null), unauthenticated = ref(false), view = ref("search"), detailSection = ref("details");
 const criteria = reactive([{fieldname:"",value:""}]), results = ref([]), searched = ref(false), selected = ref(null), revealed = ref(null), revealSeconds = ref(0), correctionRows = ref([]);
 const showReveal = ref(false), showCorrection = ref(false), decisionRequest = ref(null), decisionReview = ref(null);
 const revealForm = reactive({reason_code:"",context_note:""});
@@ -94,12 +104,20 @@ const canReveal = computed(() => ["Operator","Data Steward"].includes(boot.value
 const canCorrect = computed(() => ["Operator","Data Steward"].includes(boot.value?.user.authority));
 const correctableFields = computed(() => selected.value?.fields.filter((field) => field.correctable) || []);
 const displayFields = computed(() => { if (!selected.value) return []; const raw = Object.fromEntries((revealed.value?.fields || []).map((field) => [field.fieldname,field.value])); return selected.value.fields.map((field) => ({...field,value:Object.hasOwn(raw,field.fieldname)?raw[field.fieldname]:field.value})); });
+const contactFields = computed(() => displayFields.value.filter((field) => field.classification === "Contact"));
+const detailFields = computed(() => displayFields.value.filter((field) => field.classification !== "Contact"));
+const contactGroups = computed(() => [
+  {label:__("Residential address"),fields:contactFields.value.filter((field)=>field.fieldname.startsWith("res_"))},
+  {label:__("Postal address"),fields:contactFields.value.filter((field)=>field.fieldname === "pos_country" || field.fieldname.startsWith("post_"))},
+  {label:__("Phone and email"),fields:contactFields.value.filter((field)=>["phone_num","mobile","email"].includes(field.fieldname))},
+  {label:__("Contact persons"),fields:contactFields.value.filter((field)=>field.fieldname.startsWith("contact"))},
+].filter((group)=>group.fields.length));
 function inputType(fieldname) { const kind=searchFields.value.find((f)=>f.fieldname===fieldname)?.data_kind; return kind==="Date"?"date":kind==="Email"?"email":"text"; }
 function clearReveal() { revealed.value=null; revealSeconds.value=0; if(revealTimer) clearTimeout(revealTimer); if(countdownTimer) clearInterval(countdownTimer); revealTimer=null; countdownTimer=null; }
-function clearSelected() { clearReveal(); selected.value=null; }
+function clearSelected() { clearReveal(); selected.value=null; detailSection.value="details"; }
 function setError(e) { error.value=e.message || __("The request could not be completed."); unauthenticated.value=!sessionAuthenticated && (e.status===401 || e.status===403); }
 async function runSearch() { busy.value=true; error.value=""; message.value=""; clearSelected(); try { const data=await call("ccd_portal.api.search",{criteria:criteria.map((row)=>({...row}))}); results.value=data.results; searched.value=true; criteria.forEach((row)=>row.value=""); } catch(e){setError(e);} finally{busy.value=false;} }
-async function openDetail(id) { busy.value=true; error.value=""; clearReveal(); try { selected.value=await call("ccd_portal.api.detail",{record_id:id}); selected.value && window.scrollTo({top:document.body.scrollHeight,behavior:"smooth"}); } catch(e){setError(e);} finally{busy.value=false;} }
+async function openDetail(id) { busy.value=true; error.value=""; clearReveal(); detailSection.value="details"; try { selected.value=await call("ccd_portal.api.detail",{record_id:id}); selected.value && window.scrollTo({top:document.body.scrollHeight,behavior:"smooth"}); } catch(e){setError(e);} finally{busy.value=false;} }
 async function doReveal() { busy.value=true; error.value=""; try { revealed.value=await call("ccd_portal.api.reveal",{record_id:selected.value.id,...revealForm}); revealSeconds.value=revealed.value.expires_in; showReveal.value=false; revealForm.reason_code=""; revealForm.context_note=""; countdownTimer=setInterval(()=>revealSeconds.value=Math.max(0,revealSeconds.value-1),1000); revealTimer=setTimeout(clearReveal,revealed.value.expires_in*1000); } catch(e){setError(e);} finally{busy.value=false;} }
 function openCorrection() { correctionForm.changes={}; correctionForm.selected={}; correctionForm.reason=""; correctionForm.centre=selected.value?.centres.length===1?selected.value.centres[0]:""; showCorrection.value=true; }
 async function submitCorrection() { const changes=Object.fromEntries(Object.keys(correctionForm.selected).filter((fieldname)=>correctionForm.selected[fieldname]).map((fieldname)=>[fieldname,correctionForm.changes[fieldname] ?? ""])); busy.value=true; error.value=""; try { const response=await call("ccd_portal.api.submit_correction",{record_id:selected.value.id,changes,reason:correctionForm.reason,centre:correctionForm.centre}); showCorrection.value=false; message.value=`${__("Correction request submitted")}: ${response.request_id}`; } catch(e){setError(e);} finally{busy.value=false;} }

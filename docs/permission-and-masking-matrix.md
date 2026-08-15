@@ -38,9 +38,18 @@ requires HKSR approval and is not shipped as live configuration.
 | Email (`email`) | Exact case-folded address | First character and domain | Operator, Steward | If source workflow permits |
 | English/Chinese name fields | Only with date of birth | Initials / first character | Operator, Steward | If source workflow permits |
 | Date of birth (`birthday`) | Only with a name unless approved as a strong field | Year only | Operator, Steward | If source workflow permits |
-| Address/contact-person fields | No in V1 unless separately approved | Full | Operator, Steward if approved | If source workflow permits |
+| Residential/postal address fields | No | Full | Operator, Steward | If source workflow permits |
+| Contact-person names and phones | No | Initials / last 4 | Operator, Steward | If source workflow permits |
 | Source keys, matching evidence, internal history | Never | Not returned | Never | Never |
 
 Every result and detail field is masked according to the active versioned
 policy. `mask_strategy` never has a clear-text option. Policy activation retires
-the previous version; active and retired documents are immutable.
+the previous version; active and retired documents are immutable. The record
+detail groups Contact-classified rules into residential address, postal
+address, phone/email, and contact-person sections.
+
+Policy inclusion controls whether a field may be returned; it does not create
+or copy a value. A contact field remains empty until the authoritative source
+query exposes its column, the submitted registration has an approved mapping to
+the corresponding CCD Master field, and synchronization runs. Never infer a
+missing contact value from a different record or fuzzy/person link.

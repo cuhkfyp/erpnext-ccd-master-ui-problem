@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.9 - 2026-08-15
+
+- Added a governed Contact Information tab to masked record detail, grouped into
+  residential address, postal address, phone/email, and contact-person fields.
+- Expanded the initial draft policy template to include every current CCD Master
+  Contact Information field with masking and reason-based reveal controls.
+
 ## 0.1.8 - 2026-08-15
 
 - Combined source-assignment save and reasoned index refresh into one atomic
