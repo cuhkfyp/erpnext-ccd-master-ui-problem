@@ -121,7 +121,13 @@ class RepositoryContractTests(unittest.TestCase):
 		self.assertIn('"fixed_centres_display"', admin)
 		self.assertIn("def _invalidate_source_relations", admin)
 		self.assertIn('"index_refresh_required": resource == "source_profiles"', admin)
+		self.assertIn("def upsert_source_profile_and_refresh", admin)
+		self.assertIn("The source assignment was not saved", admin)
+		self.assertIn('_strict=True', admin)
 		self.assertIn('profile["assignment_mode"] == "Fixed Centres"', indexing)
+		self.assertIn("if strict:", indexing)
+		self.assertIn("Save and refresh index", panel)
+		self.assertIn("ccd_portal.admin.upsert_source_profile_and_refresh", panel)
 		self.assertIn('"reason": "fixed_centres"', indexing)
 
 	def test_built_assets_have_no_source_maps(self):

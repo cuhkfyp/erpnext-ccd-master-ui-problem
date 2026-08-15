@@ -52,15 +52,17 @@ bench --site <site> execute ccd_portal.admin.refresh_index \
   --kwargs '{"reason":"Initial governed index build"}'
 ```
 
-A System Manager who is also the portal Access Administrator can instead enter
-a reason and choose **Refresh index** for one saved source in the portal Sources
-tab. Source-specific refresh is preferred while configuring a cohort because it
-does not process unrelated registrations.
+A System Manager who is also the portal Access Administrator enters the reason
+in the source form and chooses **Save and refresh index**. The save and
+source-specific rebuild run in one transaction; if any record is unmapped or
+fails, the change rolls back and the previous working assignment remains in
+place. **Refresh only** is available for rebuilding an unchanged source after a
+sync and does not process unrelated registrations.
 
-Saving a source assignment immediately deactivates the existing centre
-relations for that source. This deliberately makes its records inaccessible
-until the audited refresh succeeds, so an old assignment cannot remain usable
-during a configuration change.
+For an Access Administrator who is not also a System Manager, saving a source
+assignment immediately deactivates the existing centre relations and a System
+Manager must perform the audited refresh. This deliberately prevents an old
+assignment remaining usable during a pending configuration change.
 
 The post-sync integration must call the non-whitelisted server-side method
 `ccd_portal.sync.after_agent_sync(source, source_keys, deleted_source_keys)`

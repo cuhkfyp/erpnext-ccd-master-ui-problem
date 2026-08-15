@@ -245,7 +245,12 @@ def deactivate_missing_records(source: str | None = None) -> int:
 	return len(rows)
 
 
-def refresh_source(source: str | None = None, source_keys: list[str] | None = None) -> dict:
+def refresh_source(
+	source: str | None = None,
+	source_keys: list[str] | None = None,
+	*,
+	strict: bool = False,
+) -> dict:
 	filters: dict = {}
 	if source:
 		filters["ccd_reg_source"] = source
@@ -264,6 +269,8 @@ def refresh_source(source: str | None = None, source_keys: list[str] | None = No
 				seen_records.add(result["record"])
 		except Exception:
 			frappe.db.rollback(save_point=save_point)
+			if strict:
+				raise
 			counts["failed"] += 1
 			frappe.log_error(frappe.get_traceback(), "CCD Portal index refresh failure")
 		else:

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.8 - 2026-08-15
+
+- Combined source-assignment save and reasoned index refresh into one atomic
+  Administrator action, rolling back the assignment if the rebuild is not
+  complete.
+- Retained a separate **Refresh only** action for rebuilding an unchanged source
+  after synchronization.
+
 ## 0.1.7 - 2026-08-15
 
 - Fixed a post-deployment blank screen caused by private staging-directory

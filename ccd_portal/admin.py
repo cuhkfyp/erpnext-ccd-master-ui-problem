@@ -272,6 +272,22 @@ def upsert_resource(resource: str, values=None, name: str | None = None):
 
 
 @frappe.whitelist()
+def upsert_source_profile_and_refresh(values=None, name: str | None = None, reason: str = ""):
+	"""Atomically save one source assignment and rebuild its governed index."""
+	require_post()
+	require_system_manager(reason)
+	reason = clean_reason(reason)
+	result = upsert_resource("source_profiles", values, name)
+	refresh = refresh_index(reason, result["source_registration"], _strict=True)
+	if refresh["unmapped"] or refresh["failed"]:
+		frappe.throw(
+			_("The source assignment was not saved because its index could not be rebuilt completely."),
+			frappe.ValidationError,
+		)
+	return {"source_profile": result, "refresh": refresh}
+
+
+@frappe.whitelist()
 def list_policies():
 	context = _administrator_context("Administration Read")
 	rows = frappe.get_all(
@@ -383,7 +399,7 @@ def get_coverage():
 
 
 @frappe.whitelist()
-def refresh_index(reason: str, source: str | None = None, source_keys=None):
+def refresh_index(reason: str, source: str | None = None, source_keys=None, _strict: bool = False):
 	require_post()
 	context = require_system_manager(reason)
 	reason = clean_reason(reason)
@@ -391,7 +407,7 @@ def refresh_index(reason: str, source: str | None = None, source_keys=None):
 		source_keys = frappe.parse_json(source_keys) if isinstance(source_keys, str) else source_keys
 		if not isinstance(source_keys, list) or len(source_keys) > 1000:
 			frappe.throw(_("Invalid source key batch."), frappe.ValidationError)
-	result = refresh_source(source, source_keys)
+	result = refresh_source(source, source_keys, strict=bool(_strict))
 	write_event(
 		"Index Refresh",
 		context=context,
