@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.12 - 2026-08-16
+
+- Added a guided authoritative centre-column mapping to the portal Sources form
+  for already-submitted registrations, covering per-record single- and
+  multi-centre assignments without reopening the Desk registration.
+- Added a fail-closed synchronization gate: changing the mapping clears derived
+  centre keys and disables source access until a full agent sync has populated
+  every record and **Complete sync and refresh** succeeds.
+- Added aggregate mapping readiness to the Sources table and strict validation
+  for manually entered source column identifiers.
+
 ## 0.1.11 - 2026-08-15
 
 - Replaced the guest bootstrap failure with a clean sign-in card and prevented

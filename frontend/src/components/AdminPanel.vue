@@ -12,6 +12,7 @@
 
     <div v-if="error" class="error" role="alert">{{ error }}</div>
     <div v-if="message" class="success" role="status">{{ message }}</div>
+    <div v-if="warning" class="notice" role="status">{{ warning }}</div>
 
     <template v-if="config">
       <h3>{{ config.label }}</h3>
@@ -30,6 +31,10 @@
                 <span>{{ option.label }}{{ option.active === false ? ` ${__('(inactive)')}` : '' }}</span>
               </label>
             </div>
+            <template v-else-if="field.type === 'datalist'">
+              <input :id="`admin-${field.name}`" v-model="form[field.name]" :list="`admin-${field.name}-options`" :required="field.required" :placeholder="field.placeholder || ''" autocomplete="off" />
+              <datalist :id="`admin-${field.name}-options`"><option v-for="option in optionsFor(field)" :key="option.value" :value="option.value">{{ option.label }}</option></datalist>
+            </template>
             <select v-else-if="field.options || field.reference" :id="`admin-${field.name}`" v-model="form[field.name]" :required="field.required">
               <option value="">{{ field.placeholder || __('Select…') }}</option>
               <option v-for="option in optionsFor(field)" :key="option.value" :value="option.value">{{ option.label }}{{ option.active === false ? ` ${__('(inactive)')}` : '' }}</option>
@@ -39,9 +44,9 @@
           </template>
         </div>
         <div v-if="resource === 'source_profiles' && canActivatePolicy" class="field source-refresh">
-          <label for="source-refresh-reason">{{ __('Reason for saving and refreshing') }}</label>
+          <label for="source-refresh-reason">{{ __('Reason for source change or refresh') }}</label>
           <input id="source-refresh-reason" v-model="refreshReason" maxlength="500" autocomplete="off" required :placeholder="__('Required for the audit event')" />
-          <small class="field-help">{{ __('Save and refresh is one operation. If every record cannot be indexed, the previous working assignment is kept.') }}</small>
+          <small class="field-help">{{ __('Fixed centres save and refresh together. A changed per-record column enters a fail-closed sync gate until Complete sync and refresh succeeds.') }}</small>
         </div>
         <div class="actions"><button class="primary" :disabled="busy">{{ submitLabel }}</button><button v-if="editing" type="button" class="secondary" @click="reset">{{ __('Cancel') }}</button></div>
       </form>
@@ -51,7 +56,7 @@
           <tbody>
             <tr v-for="row in rows" :key="row.name">
               <td v-for="field in config.columns" :key="field">{{ formatCell(row, field) }}</td>
-              <td><button class="secondary" @click="edit(row)">{{ __('Edit') }}</button> <button v-if="resource === 'source_profiles' && canActivatePolicy" class="secondary" :disabled="busy" @click="refreshSource(row)">{{ __('Refresh only') }}</button></td>
+              <td><button class="secondary" @click="edit(row)">{{ __('Edit') }}</button> <button v-if="resource === 'source_profiles' && canActivatePolicy" class="secondary" :disabled="busy" @click="refreshSource(row)">{{ sourceActionLabel(row) }}</button></td>
             </tr>
           </tbody>
         </table>
@@ -105,41 +110,47 @@ const resources = [
 const configs = {
   centres: { label: __("Centres"), help: __("A centre is an access boundary. Its code becomes the exact value selected in grants."), columns: ["centre_code","centre_name","department","active"], fields: [{name:"centre_code",label:__("Code"),required:true,help:__("Stable governed code, for example 12345.")},{name:"centre_name",label:__("Name"),required:true},{name:"department",label:__("ERP Department"),reference:"departments",placeholder:__("No linked department")},{name:"active",label:__("Active"),type:"check"}] },
   aliases: { label: __("Centre aliases"), help: __("Use an alias only when a source centre value differs from the canonical centre code."), columns: ["alias_code","centre","source_profile","active"], fields: [{name:"alias_code",label:__("Source code"),required:true},{name:"centre",label:__("Canonical centre"),reference:"centres",required:true,placeholder:__("Select a centre")},{name:"source_profile",label:__("Source profile"),reference:"source_profiles",placeholder:__("All source profiles")},{name:"active",label:__("Active"),type:"check"}] },
-  source_profiles: { label: __("Source centre assignments"), help: __("Choose the submitted registration, choose Fixed Centres, tick one or more centres, enter the audit reason, then use Save and refresh index once. Use Per-record Centre Key only when records in that registration belong to different centres."), columns: ["profile_code","source_registration","assignment_mode","fixed_centres_display","parser_type","active"], fields: [{name:"profile_code",label:__("Profile code"),required:true},{name:"source_registration",label:__("CCD Registration"),reference:"registrations",required:true,placeholder:__("Select a submitted registration")},{name:"assignment_mode",label:__("Centre assignment"),options:["Fixed Centres","Per-record Centre Key"],required:true,help:__("Fixed Centres applies every selected centre to every record. Per-record mode reads each record's hidden canonical centre key.")},{name:"fixed_centres",label:__("Fixed centre(s)"),reference:"centres",type:"multiselect",required:true,showWhen:{assignment_mode:"Fixed Centres"},help:__("Tick one for a single-centre source, or tick several only when every record is legitimately shared by all of them.")},{name:"parser_type",label:__("Per-record parser"),options:["Exact","Delimited","Regular Expression"],required:true,showWhen:{assignment_mode:"Per-record Centre Key"},help:__("Exact handles one key per record. Delimited handles a legitimately shared record containing multiple keys.")},{name:"delimiter",label:__("Delimiter"),showWhen:{assignment_mode:"Per-record Centre Key",parser_type:"Delimited"},placeholder:__("Comma by default"),help:__("Separates multiple centre codes stored in one record.")},{name:"parser_pattern",label:__("Bounded pattern"),showWhen:{assignment_mode:"Per-record Centre Key",parser_type:"Regular Expression"},required:true,placeholder:__("For example: ^[0-9]{5}$"),help:__("Required only for Regular Expression. Use Exact if no extraction is needed.")},{name:"active",label:__("Active"),type:"check"}] },
+  source_profiles: { label: __("Source centre assignments"), help: __("Choose Fixed Centres when every source record has the same access centres. Choose Per-record Centre Key when centre membership varies, then map the exact authoritative source column here even if the registration is already submitted."), columns: ["profile_code","source_registration","assignment_mode","authoritative_centre_column","mapping_status","fixed_centres_display","parser_type","active"], fields: [{name:"profile_code",label:__("Profile code"),required:true},{name:"source_registration",label:__("CCD Registration"),reference:"registrations",required:true,placeholder:__("Select a submitted registration")},{name:"assignment_mode",label:__("Centre assignment"),options:["Fixed Centres","Per-record Centre Key"],required:true,help:__("Fixed Centres applies every selected centre to every record. Per-record mode reads a governed centre column for each record.")},{name:"authoritative_centre_column",label:__("Authoritative centre source column"),reference:"registration_columns",type:"datalist",required:true,showWhen:{assignment_mode:"Per-record Centre Key"},placeholder:__("Type the exact database column name"),help:__("Choose a known mapped column or type an exact source column. Only letters, numbers, and underscores are accepted; the agent validates it during the next full sync.")},{name:"fixed_centres",label:__("Fixed centre(s)"),reference:"centres",type:"multiselect",required:true,showWhen:{assignment_mode:"Fixed Centres"},help:__("Tick one for a single-centre source, or tick several only when every record is legitimately shared by all of them.")},{name:"parser_type",label:__("Per-record parser"),options:["Exact","Delimited","Regular Expression"],required:true,showWhen:{assignment_mode:"Per-record Centre Key"},help:__("Exact handles one key per record. Delimited handles a legitimately shared record containing multiple keys.")},{name:"delimiter",label:__("Delimiter"),showWhen:{assignment_mode:"Per-record Centre Key",parser_type:"Delimited"},placeholder:__("Comma by default"),help:__("Separates multiple centre codes stored in one record.")},{name:"parser_pattern",label:__("Bounded pattern"),showWhen:{assignment_mode:"Per-record Centre Key",parser_type:"Regular Expression"},required:true,placeholder:__("For example: ^[0-9]{5}$"),help:__("Required only for Regular Expression. Use Exact if no extraction is needed.")},{name:"active",label:__("Active"),type:"check"}] },
   profiles: { label: __("User profiles"), columns: ["user","authority","active"], fields: [{name:"user",label:__("Frappe user"),reference:"users",required:true,placeholder:__("Select an enabled system user")},{name:"authority",label:__("Exactly one authority"),options:["Reader","Operator","Data Steward","Access Administrator"],required:true},{name:"active",label:__("Active"),type:"check"}] },
   grants: { label: __("Explicit centre grants"), help: __("A grant joins one active portal profile to one canonical centre. Registration names are not centres."), columns: ["user","centre","active","effective_from","effective_to"], fields: [{name:"user",label:__("Portal user"),reference:"profiles",required:true,placeholder:__("Select a portal profile")},{name:"centre",label:__("Centre"),reference:"centres",required:true,placeholder:__("Select a canonical centre")},{name:"active",label:__("Active"),type:"check"},{name:"effective_from",label:__("From"),type:"date",help:__("Optional; blank means immediately.")},{name:"effective_to",label:__("To"),type:"date",help:__("Optional; blank means no scheduled expiry.")}] },
   reveal_reasons: { label: __("Reveal reasons"), columns: ["reason_code","label","display_order","active"], fields: [{name:"reason_code",label:__("Code")},{name:"label",label:__("Label")},{name:"display_order",label:__("Order"),type:"number"},{name:"active",label:__("Active"),type:"check"}] },
 };
-const resource = ref("centres"), rows = ref([]), policies = ref([]), coverage = ref(null), busy = ref(false), error = ref(""), message = ref(""), editing = ref(""), activationReason = ref(""), refreshReason = ref(""), viewingPolicy = ref(null);
-const references = ref({centres:[],source_profiles:[],profiles:[],registrations:[],users:[],departments:[]});
+const resource = ref("centres"), rows = ref([]), policies = ref([]), coverage = ref(null), busy = ref(false), error = ref(""), message = ref(""), warning = ref(""), editing = ref(""), activationReason = ref(""), refreshReason = ref(""), viewingPolicy = ref(null);
+const references = ref({centres:[],source_profiles:[],profiles:[],registrations:[],registration_columns:[],users:[],departments:[]});
 const form = reactive({});
 const policy = reactive({ name: "", version: "", title: "", fields: "[]" });
 const config = computed(() => configs[resource.value]);
 const visibleFields = computed(() => (config.value?.fields || []).filter((field) => !field.showWhen || Object.entries(field.showWhen).every(([key,value]) => form[key] === value)));
-const submitLabel = computed(() => resource.value === "source_profiles" && canActivatePolicy ? (editing.value ? __("Save and refresh index") : __("Create and refresh index")) : (editing.value ? __("Update") : __("Create")));
+const submitLabel = computed(() => resource.value === "source_profiles" && canActivatePolicy ? (form.assignment_mode === "Per-record Centre Key" ? __("Save per-record configuration") : (editing.value ? __("Save and refresh index") : __("Create and refresh index"))) : (editing.value ? __("Update") : __("Create")));
 
 function optionsFor(field) {
   if (field.options) return field.options.map((value) => ({value,label:__(value)}));
+  if (field.reference === "registration_columns") return (references.value.registration_columns || []).filter((option) => option.registration === form.source_registration);
   return references.value[field.reference] || [];
 }
 
 function reset() { editing.value = ""; Object.keys(form).forEach((key) => delete form[key]); config.value?.fields.forEach((field) => form[field.name] = field.type === "check" ? true : field.type === "multiselect" ? [] : ""); if (resource.value === "source_profiles") { form.assignment_mode = "Per-record Centre Key"; form.parser_type = "Exact"; } }
 function edit(row) { editing.value = row.name; reset(); editing.value = row.name; config.value.fields.forEach((field) => form[field.name] = field.type === "check" ? Boolean(row[field.name]) : field.type === "multiselect" ? [...(row[field.name] || [])] : (row[field.name] ?? "")); window.scrollTo({top:0,behavior:"smooth"}); }
 function columnLabel(field) { if (field === "fixed_centres_display") return __("Fixed centre(s)"); return config.value?.fields.find((item) => item.name === field)?.label || field.replaceAll("_", " "); }
-function formatCell(row, field) { if (resource.value === "source_profiles" && field === "parser_type" && row.assignment_mode === "Fixed Centres") return "—"; const value = row[field]; return Array.isArray(value) ? (value.join(", ") || "—") : (value ?? ""); }
-async function select(value) { resource.value = value; error.value = ""; message.value = ""; viewingPolicy.value = null; reset(); await load(); }
+function formatCell(row, field) { if (resource.value === "source_profiles" && ((field === "parser_type" && row.assignment_mode === "Fixed Centres") || (field === "authoritative_centre_column" && row.assignment_mode === "Fixed Centres"))) return "—"; const value = row[field]; return Array.isArray(value) ? (value.join(", ") || "—") : (value ?? ""); }
+function sourceActionLabel(row) { return row.sync_pending ? __("Complete sync and refresh") : __("Refresh only"); }
+async function select(value) { resource.value = value; error.value = ""; message.value = ""; warning.value = ""; viewingPolicy.value = null; reset(); await load(); }
 async function load() { busy.value = true; try { if (config.value) rows.value = (await call("ccd_portal.admin.list_resources", {resource:resource.value}, false)).rows; else if (resource.value === "policies") policies.value = (await call("ccd_portal.admin.list_policies", {}, false)).policies; else coverage.value = await call("ccd_portal.admin.get_coverage", {}, false); } catch (e) { error.value = e.message; } finally { busy.value = false; } }
 async function loadReferences() { references.value = await call("ccd_portal.admin.reference_options", {}, false); }
 async function saveResource() {
-  busy.value = true; error.value = "";
+  busy.value = true; error.value = ""; message.value = ""; warning.value = "";
   try {
     const values = {...form};
+    let authoritativeCentreColumn = "";
     if (resource.value === "source_profiles") {
+      authoritativeCentreColumn = String(values.authoritative_centre_column || "").trim();
+      delete values.authoritative_centre_column;
       values.fixed_centres = [...(values.fixed_centres || [])];
       if (values.assignment_mode === "Fixed Centres") {
         if (!values.fixed_centres.length) throw new Error(__("Select at least one fixed centre."));
         values.parser_type = "Exact"; values.delimiter = ""; values.parser_pattern = "";
       } else {
+        if (!authoritativeCentreColumn) throw new Error(__("Enter the authoritative centre source column."));
         values.fixed_centres = [];
         if (values.parser_type === "Exact") { values.delimiter = ""; values.parser_pattern = ""; }
         if (values.parser_type === "Delimited") values.parser_pattern = "";
@@ -147,18 +158,20 @@ async function saveResource() {
       }
     }
     if (resource.value === "source_profiles" && canActivatePolicy) {
-      if (String(refreshReason.value || "").trim().length < 3) throw new Error(__("Enter a reason before saving and refreshing the source."));
-      const result = await call("ccd_portal.admin.upsert_source_profile_and_refresh", {values,name:editing.value || null,reason:refreshReason.value});
-      message.value = `${__("Source assignment saved, audited, and refreshed")}: ${result.refresh.indexed}/${result.refresh.total} ${__("indexed")}.`;
+      if (String(refreshReason.value || "").trim().length < 3) throw new Error(__("Enter a reason before changing the source."));
+      const result = await call("ccd_portal.admin.configure_source", {values,name:editing.value || null,authoritative_centre_column:authoritativeCentreColumn,reason:refreshReason.value});
+      if (result.sync_required) warning.value = `${__("Mapping saved and audited. Portal access for this source is disabled. Run the registration's existing full agent synchronization, then enter a new reason and click Complete sync and refresh.")} ${__("Centre keys")}: ${result.keyed_records}/${result.total_records}.`;
+      else message.value = `${__("Source assignment saved, audited, and refreshed")}: ${result.refresh.indexed}/${result.refresh.total} ${__("indexed")}.`;
       refreshReason.value = "";
     } else {
+      if (resource.value === "source_profiles" && values.assignment_mode === "Per-record Centre Key") throw new Error(__("A System Manager who is also the portal Access Administrator must save a submitted-registration centre mapping."));
       await call("ccd_portal.admin.upsert_resource", {resource:resource.value,values,name:editing.value || null});
       message.value = resource.value === "source_profiles" ? __("Source assignment saved. A System Manager must refresh its index before records are accessible.") : __("Governance record saved and audited.");
     }
     reset(); await Promise.all([load(),loadReferences()]);
   } catch(e) { error.value=e.message; } finally { busy.value=false; }
 }
-async function refreshSource(row) { busy.value=true; error.value=""; try { if (String(refreshReason.value || "").trim().length < 3) throw new Error(__("Enter a System Manager reason before refreshing the source index.")); const result=await call("ccd_portal.admin.refresh_index",{reason:refreshReason.value,source:row.source_registration}); refreshReason.value=""; message.value=`${__("Index refreshed")}: ${result.indexed}/${result.total} ${__("indexed")}, ${result.unmapped} ${__("unmapped")}, ${result.failed} ${__("failed")}.`; await load(); } catch(e) { error.value=e.message; } finally { busy.value=false; } }
+async function refreshSource(row) { busy.value=true; error.value=""; message.value=""; warning.value=""; try { if (String(refreshReason.value || "").trim().length < 3) throw new Error(__("Enter a System Manager reason before refreshing the source index.")); const result=row.sync_pending ? await call("ccd_portal.admin.complete_source_sync",{reason:refreshReason.value,source:row.source_registration}) : await call("ccd_portal.admin.refresh_index",{reason:refreshReason.value,source:row.source_registration}); const refresh=result.refresh || result; refreshReason.value=""; message.value=`${row.sync_pending ? __("Source sync completed and index opened") : __("Index refreshed")}: ${refresh.indexed}/${refresh.total} ${__("indexed")}, ${refresh.unmapped} ${__("unmapped")}, ${refresh.failed} ${__("failed")}.`; await load(); } catch(e) { error.value=e.message; } finally { busy.value=false; } }
 function resetPolicy() { policy.name=""; policy.version=""; policy.title=""; policy.fields="[]"; }
 function yesNo(value) { return value ? __("Yes") : __("No"); }
 function viewPolicy(row) { viewingPolicy.value=row; requestAnimationFrame(()=>document.querySelector(".policy-detail")?.scrollIntoView({behavior:"smooth",block:"start"})); }

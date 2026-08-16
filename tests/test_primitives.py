@@ -1,7 +1,7 @@
 import json
 import unittest
 
-from ccd_portal.primitives import canonical_json, is_valid_hkid, mask_value, normalize_value
+from ccd_portal.primitives import canonical_json, is_valid_hkid, is_valid_source_column, mask_value, normalize_value
 
 
 class PrimitiveTests(unittest.TestCase):
@@ -37,6 +37,13 @@ class PrimitiveTests(unittest.TestCase):
 
 	def test_canonical_json_never_depends_on_mapping_order(self):
 		self.assertEqual(canonical_json({"b": 2, "a": 1}), '{"a":1,"b":2}')
+
+	def test_source_column_is_a_bounded_unquoted_identifier(self):
+		self.assertTrue(is_valid_source_column("centre_code_01"))
+		self.assertTrue(is_valid_source_column("CentreCode"))
+		for invalid in ("", "1centre", "centre code", "dbo.centre", "centre;drop", "a" * 141):
+			with self.subTest(value=invalid):
+				self.assertFalse(is_valid_source_column(invalid))
 
 	def test_fixture_contains_only_synthetic_namespace(self):
 		with open("tests/fixtures/synthetic_records.json", encoding="utf-8") as fixture:

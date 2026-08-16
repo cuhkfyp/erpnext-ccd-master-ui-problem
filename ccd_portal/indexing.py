@@ -14,7 +14,7 @@ def _source_profile(source: str) -> dict | None:
 	row = frappe.db.get_value(
 		"CCD Portal Source Profile",
 		{"source_registration": source, "active": 1},
-		["name", "assignment_mode", "parser_type", "delimiter", "parser_pattern"],
+		["name", "assignment_mode", "parser_type", "delimiter", "parser_pattern", "sync_pending"],
 		as_dict=True,
 	)
 	if not row:
@@ -143,6 +143,8 @@ def index_record(ccd_master_name: str) -> dict:
 	profile = _source_profile(doc.ccd_reg_source)
 	if not profile:
 		return {"status": "unmapped", "record": record.name, "reason": "source_profile"}
+	if profile.get("sync_pending"):
+		return {"status": "unmapped", "record": record.name, "reason": "source_sync_pending"}
 
 	if profile["assignment_mode"] == "Fixed Centres":
 		configured = sorted(set(profile["fixed_centres"]))

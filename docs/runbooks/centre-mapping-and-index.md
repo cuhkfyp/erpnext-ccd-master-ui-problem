@@ -13,10 +13,11 @@
      every record is legitimately shared by all of them. This mode works with
      submitted registrations and does not require a CCD Field Match change.
    - **Per-record Centre Key** is required when records within one registration
-     belong to different centres. Map the authoritative source centre column to
-     `CCD Portal Canonical Centre Key` (`ccd_portal_centre_key`) in the existing
-     registration mapping. The portal migration exposes this target without
-     changing saved mappings.
+     belong to different centres. In the portal **Sources** form, enter the exact
+     **Authoritative centre source column**. A System Manager who is also the
+     Access Administrator can add or change this one governed mapping even when
+     the registration is already submitted; unrelated registration mappings are
+     not editable from the portal.
 4. For per-record mode, add active aliases when a source value differs from its
    canonical centre code. An alias can be constrained to one source profile;
    ambiguous aliases fail closed.
@@ -33,6 +34,34 @@ source profile. In per-record mode, parser choices are exact, delimited, or
 bounded regular expression. For a legitimately shared record, the canonical
 value may yield more than one centre; the indexer creates an independent
 relation for each. This never relates the centres themselves.
+
+The three supported assignment cases are:
+
+| Source shape | Sources form | Parser | Example |
+|---|---|---|---|
+| Different records belong to different centres | Per-record Centre Key | Exact | record 1=`CENTRE-A`, record 2=`CENTRE-B` |
+| An individual record may belong to several centres | Per-record Centre Key | Delimited | record 3=`CENTRE-A,CENTRE-B` |
+| Every source record is shared by the same centres | Fixed Centres | Not applicable | select both `CENTRE-A` and `CENTRE-B` |
+
+The authoritative column accepts a bounded unquoted identifier containing only
+letters, numbers, and underscores and cannot start with a number. Previously
+mapped source columns appear as suggestions; an agent-only remote column can be
+typed exactly. This restriction matches the existing agent's unquoted SELECT
+behavior and prevents a mapping value becoming SQL syntax.
+
+Changing a per-record mapping is intentionally two-stage:
+
+1. **Save per-record configuration** audits the submitted child-mapping change,
+   clears the derived `CCD Master.ccd_portal_centre_key` values, invalidates the
+   source's portal centre relations, and marks the source **Waiting for source
+   sync**. This fail-closed state survives document hooks and container restarts.
+2. Run the registration's existing **full agent synchronization**. The agent
+   reads the newly saved mapping and repopulates the hidden canonical key.
+3. Return to **Sources**, enter a new audit reason, and choose **Complete sync
+   and refresh**. The pending gate is removed only in the same transaction as a
+   successful strict index rebuild. Missing keys, unknown aliases, invalid
+   parsers, or incomplete coverage roll the operation back and keep access
+   disabled.
 
 Use **Exact** when the synchronized value is already one complete centre code,
 such as `12345`. Exact requires neither Delimiter nor Pattern. Use **Delimited**

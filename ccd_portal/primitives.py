@@ -10,6 +10,11 @@ def canonical_json(value) -> str:
 	return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
 
 
+def is_valid_source_column(value: str) -> bool:
+	"""Accept only an unquoted SQL identifier that the existing agent can select safely."""
+	return bool(re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,139}", str(value or "")))
+
+
 def normalize_value(value, kind: str) -> str:
 	raw = unicodedata.normalize("NFKC", str(value or "")).strip()
 	if kind == "Date":
