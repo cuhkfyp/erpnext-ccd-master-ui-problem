@@ -8,12 +8,14 @@ from frappe.utils import now_datetime
 
 from ccd_portal.policy import get_active_policy
 from ccd_portal.security import normalize_value, opaque_record_id, search_token
+from ccd_portal.source_identity import canonical_source_id
 
 
 def _source_profile(source: str) -> dict | None:
+	source_id = canonical_source_id(source)
 	row = frappe.db.get_value(
 		"CCD Portal Source Profile",
-		{"source_registration": source, "active": 1},
+		{"canonical_source_id": source_id, "active": 1},
 		["name", "assignment_mode", "parser_type", "delimiter", "parser_pattern", "sync_pending"],
 		as_dict=True,
 	)
@@ -255,6 +257,7 @@ def refresh_source(
 ) -> dict:
 	filters: dict = {}
 	if source:
+		source = canonical_source_id(source)
 		filters["ccd_reg_source"] = source
 	if source_keys:
 		filters["ccd_source_key"] = ["in", source_keys]

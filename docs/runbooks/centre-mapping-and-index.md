@@ -18,6 +18,15 @@
      Access Administrator can add or change this one governed mapping even when
      the registration is already submitted; unrelated registration mappings are
      not editable from the portal.
+
+Select the **current submitted CCD Registration**, including its Frappe
+amendment suffix (for example, `DT-NB10_event-management-34`). The portal keeps
+that exact document for its latest field mappings but derives a separate
+**Stable CCD source** by removing the trailing numeric amendment suffix, matching
+the existing agent behavior. In this example, records remain indexed under
+`CCD Master.ccd_reg_source = DT-NB10_event-management`. Do not rewrite CCD Master
+to the suffixed document name. A source profile may be moved to a later
+submitted amendment only when it resolves to the same stable source lineage.
 4. For per-record mode, add active aliases when a source value differs from its
    canonical centre code. An alias can be constrained to one source profile;
    ambiguous aliases fail closed.

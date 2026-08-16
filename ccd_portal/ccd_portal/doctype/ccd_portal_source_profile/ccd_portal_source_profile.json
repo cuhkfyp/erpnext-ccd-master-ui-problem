@@ -1,9 +1,10 @@
 {
  "doctype":"DocType","name":"CCD Portal Source Profile","module":"CCD Portal","autoname":"field:profile_code","naming_rule":"By fieldname","allow_rename":0,
- "field_order":["profile_code","source_registration","assignment_mode","fixed_centres","parser_type","delimiter","parser_pattern","sync_pending","active"],
+ "field_order":["profile_code","source_registration","canonical_source_id","assignment_mode","fixed_centres","parser_type","delimiter","parser_pattern","sync_pending","active"],
  "fields":[
   {"fieldname":"profile_code","fieldtype":"Data","label":"Profile Code","reqd":1,"unique":1,"in_list_view":1},
   {"fieldname":"source_registration","fieldtype":"Link","label":"CCD Registration","options":"CCD Registration","reqd":1,"unique":1,"in_list_view":1},
+  {"fieldname":"canonical_source_id","fieldtype":"Data","label":"Canonical CCD Source ID","unique":1,"read_only":1,"in_list_view":1,"description":"Stable ccd_reg_source used by the agent after removing Frappe's numeric amendment suffix."},
   {"fieldname":"assignment_mode","fieldtype":"Select","label":"Centre Assignment","options":"Fixed Centres\nPer-record Centre Key","default":"Per-record Centre Key","reqd":1,"in_list_view":1},
   {"fieldname":"fixed_centres","fieldtype":"Table","label":"Fixed Centres","options":"CCD Portal Source Fixed Centre","depends_on":"eval:doc.assignment_mode=='Fixed Centres'","description":"Every record from this registration is independently related to every selected centre."},
   {"fieldname":"parser_type","fieldtype":"Select","label":"Centre Key Parser","options":"Exact\nDelimited\nRegular Expression","default":"Exact","reqd":1,"depends_on":"eval:doc.assignment_mode=='Per-record Centre Key'"},

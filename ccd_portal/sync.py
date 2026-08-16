@@ -14,6 +14,7 @@ from ccd_portal.indexing import (
 	mark_source_identity_deleted,
 	refresh_source,
 )
+from ccd_portal.source_identity import canonical_source_id
 
 
 def on_ccd_master_change(doc, method=None) -> None:
@@ -94,7 +95,7 @@ def after_agent_sync(
 		return {"status": "disabled", "reason": "secret_not_configured"}
 	if frappe.db.count("CCD Portal Policy", {"status": "Active"}) != 1:
 		return {"status": "disabled", "reason": "active_policy_not_configured"}
-	source = str(source or "").strip()
+	source = canonical_source_id(source)
 	if not source:
 		frappe.throw("A source registration is required.", frappe.ValidationError)
 	source_keys = sorted({str(key) for key in (source_keys or []) if str(key)})

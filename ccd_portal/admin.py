@@ -14,6 +14,7 @@ from ccd_portal.security import (
 	require_post,
 	require_system_manager,
 )
+from ccd_portal.source_identity import canonical_source_id, same_source_lineage
 
 CENTRE_MAPPING_FIELDNAME = "ccd_portal_centre_key"
 CENTRE_MAPPING_OPTION = "ccd_portal_centre_key: CCD Portal Canonical Centre Key"
@@ -45,6 +46,7 @@ RESOURCE_FIELDS = {
 			"name",
 			"profile_code",
 			"source_registration",
+			"canonical_source_id",
 			"assignment_mode",
 			"parser_type",
 			"delimiter",
@@ -99,6 +101,7 @@ def _resource(resource: str):
 
 def _invalidate_source_relations(source_registration: str) -> None:
 	"""Fail closed after a source assignment changes, until its index is refreshed."""
+	source_id = canonical_source_id(source_registration)
 	frappe.db.sql(
 		"""
 		UPDATE `tabCCD Portal Record Centre` rc
@@ -106,7 +109,7 @@ def _invalidate_source_relations(source_registration: str) -> None:
 		   SET rc.active = 0
 		 WHERE r.source_registration = %s AND rc.active = 1
 		""",
-		(source_registration,),
+		(source_id,),
 	)
 
 
@@ -129,6 +132,7 @@ def _centre_mapping_rows(source_registration: str) -> list[dict]:
 
 
 def _centre_key_coverage(source_registration: str) -> dict:
+	source_id = canonical_source_id(source_registration)
 	row = frappe.db.sql(
 		"""
 		SELECT COUNT(*) AS total,
@@ -136,7 +140,7 @@ def _centre_key_coverage(source_registration: str) -> dict:
 		  FROM `tabCCD Master`
 		 WHERE ccd_reg_source = %s
 		""",
-		(source_registration,),
+		(source_id,),
 		as_dict=True,
 	)[0]
 	return {"total": int(row.total or 0), "keyed": int(row.keyed or 0)}
@@ -208,10 +212,11 @@ def _set_centre_mapping(source_registration: str, source_column: str) -> bool:
 
 
 def _clear_centre_keys(source_registration: str) -> int:
-	count = frappe.db.count("CCD Master", {"ccd_reg_source": source_registration})
+	source_id = canonical_source_id(source_registration)
+	count = frappe.db.count("CCD Master", {"ccd_reg_source": source_id})
 	frappe.db.sql(
 		"UPDATE `tabCCD Master` SET ccd_portal_centre_key = NULL WHERE ccd_reg_source = %s",
-		(source_registration,),
+		(source_id,),
 	)
 	return int(count or 0)
 
@@ -393,8 +398,15 @@ def upsert_resource(resource: str, values=None, name: str | None = None):
 	if name:
 		doc = frappe.get_doc(doctype, name)
 		for fieldname in IMMUTABLE_RESOURCE_FIELDS.get(resource, ()):
-			if fieldname in values and str(values[fieldname] or "") != str(doc.get(fieldname) or ""):
-				frappe.throw(_("Create a new record instead of changing its governed identity."))
+			if fieldname not in values or str(values[fieldname] or "") == str(doc.get(fieldname) or ""):
+				continue
+			if (
+				resource == "source_profiles"
+				and fieldname == "source_registration"
+				and same_source_lineage(values[fieldname], doc.get(fieldname))
+			):
+				continue
+			frappe.throw(_("Create a new record instead of changing its governed identity."))
 		doc.update(values)
 		if resource == "source_profiles":
 			doc.set("fixed_centres", [{"centre": centre} for centre in fixed_centres])
@@ -422,6 +434,7 @@ def upsert_resource(resource: str, values=None, name: str | None = None):
 	if resource == "source_profiles":
 		result["fixed_centres"] = [row.centre for row in doc.fixed_centres]
 		result["fixed_centres_display"] = ", ".join(result["fixed_centres"]) or "—"
+		result["canonical_source_id"] = doc.canonical_source_id
 	return result
 
 

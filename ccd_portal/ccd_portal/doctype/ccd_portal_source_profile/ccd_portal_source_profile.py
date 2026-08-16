@@ -4,9 +4,21 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
+from ccd_portal.source_identity import canonical_source_id
+
 
 class CCDPortalSourceProfile(Document):
 	def validate(self):
+		self.canonical_source_id = canonical_source_id(self.source_registration)
+		if not self.canonical_source_id:
+			frappe.throw(_("Select a valid CCD Registration."))
+		duplicate = frappe.db.get_value(
+			"CCD Portal Source Profile",
+			{"canonical_source_id": self.canonical_source_id, "name": ["!=", self.name or ""]},
+			"name",
+		)
+		if duplicate:
+			frappe.throw(_("A source profile already governs this CCD source lineage."))
 		self.assignment_mode = self.assignment_mode or "Per-record Centre Key"
 		if self.assignment_mode == "Fixed Centres":
 			centres = [str(row.centre or "").strip() for row in self.fixed_centres]

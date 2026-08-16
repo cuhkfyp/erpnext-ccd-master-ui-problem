@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.13 - 2026-08-16
+
+- Keep the current submitted CCD Registration amendment as the authoritative
+  configuration document while deriving the stable agent source identity used
+  by `CCD Master.ccd_reg_source`.
+- Backfill existing source profiles with their canonical source identity and
+  index amended registrations against the stable source without changing the
+  agent program.
+- Allow a governed source profile to move to a newer submitted amendment only
+  when both documents resolve to the same source lineage.
+
 ## 0.1.12 - 2026-08-16
 
 - Added a guided authoritative centre-column mapping to the portal Sources form

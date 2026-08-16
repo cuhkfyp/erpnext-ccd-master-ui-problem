@@ -131,6 +131,8 @@ class RepositoryContractTests(unittest.TestCase):
 		self.assertEqual(fields["fixed_centres"]["options"], "CCD Portal Source Fixed Centre")
 		self.assertEqual(fields["sync_pending"]["default"], "0")
 		self.assertTrue(fields["sync_pending"]["read_only"])
+		self.assertTrue(fields["canonical_source_id"]["read_only"])
+		self.assertTrue(fields["canonical_source_id"]["unique"])
 
 		panel = (ROOT / "frontend" / "src" / "components" / "AdminPanel.vue").read_text()
 		admin = (ROOT / "ccd_portal" / "admin.py").read_text()
@@ -138,6 +140,8 @@ class RepositoryContractTests(unittest.TestCase):
 		self.assertIn('options:["Fixed Centres","Per-record Centre Key"]', panel)
 		self.assertIn('type:"multiselect"', panel)
 		self.assertIn('name:"authoritative_centre_column"', panel)
+		self.assertIn('"canonical_source_id"', panel)
+		self.assertIn("Stable CCD source", panel)
 		self.assertIn('type:"datalist"', panel)
 		self.assertIn('ccd_portal.admin.refresh_index', panel)
 		self.assertIn('ccd_portal.admin.configure_source', panel)
@@ -159,6 +163,17 @@ class RepositoryContractTests(unittest.TestCase):
 		self.assertIn("Save and refresh index", panel)
 		self.assertIn("Complete sync and refresh", panel)
 		self.assertIn('"reason": "fixed_centres"', indexing)
+
+	def test_amended_registration_uses_canonical_agent_source(self):
+		identity = (ROOT / "ccd_portal" / "source_identity.py").read_text()
+		indexing = (ROOT / "ccd_portal" / "indexing.py").read_text()
+		admin = (ROOT / "ccd_portal" / "admin.py").read_text()
+		patches = (ROOT / "ccd_portal" / "patches.txt").read_text()
+		self.assertIn('re.compile(r"-\\d+$")', identity)
+		self.assertIn('{"canonical_source_id": source_id, "active": 1}', indexing)
+		self.assertIn('filters["ccd_reg_source"] = source', indexing)
+		self.assertIn("same_source_lineage", admin)
+		self.assertIn("backfill_canonical_source_ids", patches)
 
 	def test_built_assets_have_no_source_maps(self):
 		assets = ROOT / "ccd_portal" / "public" / "ccd-portal" / "assets"
