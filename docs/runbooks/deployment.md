@@ -40,9 +40,10 @@ The existing ERPNext restart scripts conditionally invoke:
 That restores only `ccd_portal` into backend, scheduler, and both queue workers,
 restores the local interpreter path and frontend assets, reloads those Python
 workers, and remounts the existing backend SSHFS mount through
-`sshmount_docker_backend.sh`. It does not
-capture or overwrite `db_connector`, `hksr`, Studio, site data, nginx settings,
-VPN settings, or other application code.
+`sshmount_docker_backend.sh`. It does not capture or overwrite `db_connector`,
+`hksr`, Studio, site data, VPN settings, or other application code. It does
+maintain the three exact Desk-entry redirects described below in the existing
+host-owned nginx configuration; it leaves all unrelated nginx routes unchanged.
 
 The `sites/apps.txt` registration, installed-app row, portal DocTypes, audit
 records, corrections, governance configuration, and site-local secret live in
@@ -71,6 +72,37 @@ but must not touch Docker or the site, synchronize only the host recovery copy:
 ```bash
 ./deployment/deploy_development.sh --persist-only
 ```
+
+### Desk entry routes
+
+The public CCD Portal remains available only at `/ccd-portal`. The general site
+entry points `/`, `/app`, and `/app/` are exact nginx matches that return a
+temporary relative redirect to `/app/home`. A relative `Location` is deliberate:
+the frontend container listens on HTTP port 8080 behind the external HTTPS proxy,
+so an nginx-generated absolute redirect can otherwise expose the internal scheme
+and port. Guests reaching `/app/home` proceed through Frappe's normal login flow;
+authenticated staff reach Desk Home.
+
+The reviewed location block is stored in
+`deployment/nginx_frontend_route_overrides.conf`. The deployment script merges
+that bounded block into the existing host-owned
+`/root/erpnext_docker_volume/frappe_nginx_current.conf`, validates the complete
+configuration with `nginx -t`, and performs an nginx configuration reload. It
+does not restart the frontend or any other container. The existing
+`erpnext_restart.sh` already restores `frappe_nginx_current.conf` after container
+recreation, and `deploy_ccd_portal.sh --runtime-only` revalidates and reapplies it.
+
+Verify all three entry paths after deployment:
+
+```bash
+curl -sSIk -H 'Host: hksrfam.hksr.org.hk' https://127.0.0.1/
+curl -sSIk -H 'Host: hksrfam.hksr.org.hk' https://127.0.0.1/app
+curl -sSIk -H 'Host: hksrfam.hksr.org.hk' https://127.0.0.1/app/
+```
+
+Each response must be `302` with `Location: /app/home`; it must never contain
+the frontend container's `http://...:8080` address. Then verify `/app/home`
+returns Desk for an authenticated ERPNext user.
 
 ### Current Docker/SSHFS safeguards
 

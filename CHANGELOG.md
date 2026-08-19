@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.14 - 2026-08-19
+
+- Route the exact general site entry points `/`, `/app`, and `/app/` to Desk
+  Home at `/app/home` without changing the standalone `/ccd-portal` route.
+- Preserve the external HTTPS origin with relative redirects and persist the
+  validated nginx override through the existing deployment and recovery flow.
+
 ## 0.1.13 - 2026-08-16
 
 - Keep the current submitted CCD Registration amendment as the authoritative

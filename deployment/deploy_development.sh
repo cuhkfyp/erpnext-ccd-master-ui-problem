@@ -11,6 +11,9 @@ if [[ ! -f "$APP_ROOT/pyproject.toml" && -f "$PERSISTENT_APP/pyproject.toml" ]];
 	APP_ROOT="$PERSISTENT_APP"
 fi
 APP_IN_CONTAINER="/home/frappe/frappe-bench/apps/$APP_NAME"
+FRONTEND_CONTAINER="frappe_docker-frontend-1"
+NGINX_ROUTE_SNIPPET="$APP_ROOT/deployment/nginx_frontend_route_overrides.conf"
+PERSISTENT_NGINX_CONFIG="$VOLUME_ROOT/frappe_nginx_current.conf"
 BENCH="/usr/local/bin/bench"
 RUNTIME_ONLY=0
 RESTART=0
@@ -42,6 +45,67 @@ test -f "$APP_ROOT/ccd_portal/hooks.py"
 test -f "$APP_ROOT/frontend/package-lock.json"
 test -f "$APP_ROOT/ccd_portal/www/ccd_portal.html"
 test -d "$APP_ROOT/ccd_portal/public/ccd-portal/assets"
+test -f "$NGINX_ROUTE_SNIPPET"
+
+persist_nginx_route_overrides() {
+	local nginx_stage
+	local begin_marker="# BEGIN CCD Portal managed Desk entry redirects."
+	local end_marker="# END CCD Portal managed Desk entry redirects."
+
+	if [[ ! -f "$PERSISTENT_NGINX_CONFIG" ]]; then
+		(( PERSIST_ONLY )) && {
+			echo "Persistent Frappe nginx configuration is missing: $PERSISTENT_NGINX_CONFIG" >&2
+			exit 1
+		}
+		docker cp "$FRONTEND_CONTAINER:/etc/nginx/conf.d/frappe.conf" "$PERSISTENT_NGINX_CONFIG"
+	fi
+	nginx_stage="$(mktemp "$VOLUME_ROOT/.frappe-nginx.XXXXXX")"
+	if grep -qF "$begin_marker" "$PERSISTENT_NGINX_CONFIG"; then
+		grep -qF "$end_marker" "$PERSISTENT_NGINX_CONFIG"
+		awk -v snippet="$NGINX_ROUTE_SNIPPET" -v begin="$begin_marker" -v end="$end_marker" '
+			index($0, begin) {
+				while ((getline line < snippet) > 0) print line
+				close(snippet)
+				skipping = 1
+				next
+			}
+			index($0, end) { skipping = 0; next }
+			!skipping { print }
+		' "$PERSISTENT_NGINX_CONFIG" > "$nginx_stage"
+	else
+		if grep -qF "$end_marker" "$PERSISTENT_NGINX_CONFIG"; then
+			echo "Incomplete managed nginx redirect block: $PERSISTENT_NGINX_CONFIG" >&2
+			rm -f -- "$nginx_stage"
+			exit 1
+		fi
+		sed "/^server[[:space:]]*{$/r $NGINX_ROUTE_SNIPPET" "$PERSISTENT_NGINX_CONFIG" > "$nginx_stage"
+	fi
+	grep -qF "$begin_marker" "$nginx_stage"
+	grep -qF "$end_marker" "$nginx_stage"
+	if ! cmp -s "$nginx_stage" "$PERSISTENT_NGINX_CONFIG"; then
+		install -m 0644 "$nginx_stage" "$PERSISTENT_NGINX_CONFIG"
+	fi
+	rm -f -- "$nginx_stage"
+}
+
+apply_nginx_route_overrides() {
+	docker cp "$PERSISTENT_NGINX_CONFIG" "$FRONTEND_CONTAINER:/tmp/frappe.conf.ccd-portal"
+	docker exec -u root "$FRONTEND_CONTAINER" sh -c '
+		set -eu
+		current=/etc/nginx/conf.d/frappe.conf
+		backup=/tmp/frappe.conf.before-ccd-portal
+		cp -p "$current" "$backup"
+		cp /tmp/frappe.conf.ccd-portal "$current"
+		if nginx -t; then
+			nginx -s reload
+			rm -f "$backup" /tmp/frappe.conf.ccd-portal
+		else
+			cp "$backup" "$current"
+			rm -f /tmp/frappe.conf.ccd-portal
+			exit 1
+		fi
+	'
+}
 
 if (( ! RUNTIME_ONLY )); then
 	python3 "$APP_ROOT/scripts/scan_repository.py"
@@ -54,9 +118,12 @@ if (( ! RUNTIME_ONLY )); then
 	install -m 0755 "$APP_ROOT/deployment/deploy_development.sh" "$VOLUME_ROOT/deploy_ccd_portal.sh"
 fi
 
+persist_nginx_route_overrides
+
 if (( PERSIST_ONLY )); then
 	echo "ccd_portal recovery source synchronized without touching Docker or the site."
 	echo "Persistent recovery source: $PERSISTENT_APP"
+	echo "Persistent Desk entry redirects: $PERSISTENT_NGINX_CONFIG"
 	exit 0
 fi
 
@@ -124,6 +191,7 @@ if (( ! RUNTIME_ONLY )); then
 	docker exec frappe_docker-backend-1 "$BENCH" build --app "$APP_NAME"
 fi
 docker exec frappe_docker-backend-1 "$BENCH" --site "$SITE" clear-cache
+apply_nginx_route_overrides
 
 if (( ! RESTART )); then
 	old_workers="$(docker exec frappe_docker-backend-1 sh -c \

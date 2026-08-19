@@ -183,6 +183,9 @@ class RepositoryContractTests(unittest.TestCase):
 
 	def test_deploy_is_persistent_and_restart_is_opt_in(self):
 		deploy = (ROOT / "deployment" / "deploy_development.sh").read_text(encoding="utf-8")
+		nginx_routes = (
+			ROOT / "deployment" / "nginx_frontend_route_overrides.conf"
+		).read_text(encoding="utf-8")
 		self.assertIn('PERSISTENT_APP="$VOLUME_ROOT/persistent_apps/$APP_NAME"', deploy)
 		self.assertIn("if (( RESTART )); then", deploy)
 		self.assertIn("docker kill --signal=HUP frappe_docker-backend-1", deploy)
@@ -205,6 +208,17 @@ class RepositoryContractTests(unittest.TestCase):
 		self.assertIn("-type f -exec chmod 0644", deploy)
 		self.assertIn("chown -R frappe:frappe", deploy)
 		self.assertIn('awk "1" "$file"', deploy)
+		self.assertIn("persist_nginx_route_overrides", deploy)
+		self.assertIn("apply_nginx_route_overrides", deploy)
+		self.assertIn("nginx -t", deploy)
+		self.assertIn("nginx -s reload", deploy)
+		self.assertIn("# BEGIN CCD Portal managed Desk entry redirects.", nginx_routes)
+		self.assertIn("# END CCD Portal managed Desk entry redirects.", nginx_routes)
+		self.assertFalse(nginx_routes.startswith("\n"))
+		for route in ("/", "/app", "/app/"):
+			self.assertIn(f"location = {route} {{", nginx_routes)
+		self.assertEqual(nginx_routes.count("absolute_redirect off;"), 3)
+		self.assertEqual(nginx_routes.count("return 302 /app/home;"), 3)
 
 	def test_sshmount_recovery_is_layer_aware_and_bounded(self):
 		script = (ROOT / "deployment" / "sshmount_docker_backend.sh").read_text(encoding="utf-8")
