@@ -96,15 +96,58 @@ apply_nginx_route_overrides() {
 		backup=/tmp/frappe.conf.before-ccd-portal
 		cp -p "$current" "$backup"
 		cp /tmp/frappe.conf.ccd-portal "$current"
-		if nginx -t; then
-			nginx -s reload
-			rm -f "$backup" /tmp/frappe.conf.ccd-portal
-		else
-			cp "$backup" "$current"
-			rm -f /tmp/frappe.conf.ccd-portal
-			exit 1
-		fi
 	'
+	repair_nginx_runtime_permissions
+	if docker exec -u frappe "$FRONTEND_CONTAINER" nginx -t; then
+		docker exec -u frappe "$FRONTEND_CONTAINER" nginx -s reload
+		docker exec -u root "$FRONTEND_CONTAINER" \
+			rm -f /tmp/frappe.conf.before-ccd-portal /tmp/frappe.conf.ccd-portal
+	else
+		docker exec -u root "$FRONTEND_CONTAINER" sh -c '
+			cp /tmp/frappe.conf.before-ccd-portal /etc/nginx/conf.d/frappe.conf
+			rm -f /tmp/frappe.conf.before-ccd-portal /tmp/frappe.conf.ccd-portal
+		'
+		repair_nginx_runtime_permissions
+		docker exec -u frappe "$FRONTEND_CONTAINER" nginx -t
+		exit 1
+	fi
+}
+
+repair_nginx_runtime_permissions() {
+	# The frontend image runs nginx as frappe. Running nginx -t as root changes
+	# its private temp directories to the compiled-in nobody user, causing HTML
+	# 500 responses whenever a request body exceeds the 16 KiB memory buffer.
+	docker exec -u root "$FRONTEND_CONTAINER" sh -c '
+		set -eu
+		for dir in body proxy fastcgi uwsgi scgi; do
+			target="/var/lib/nginx/$dir"
+			test -d "$target"
+			chown frappe:frappe "$target"
+			chmod 0700 "$target"
+		done
+	'
+}
+
+sync_frontend_dependency_assets() {
+	local app source target app_stage
+	for app in chat hrms; do
+		source="/home/frappe/frappe-bench/apps/$app/$app/public"
+		target="/home/frappe/frappe-bench/apps/$app/$app/public"
+		if ! docker exec frappe_docker-backend-1 test -d "$source"; then
+			continue
+		fi
+		app_stage="$(mktemp -d "$VOLUME_ROOT/.frontend-$app-assets.XXXXXX")"
+		docker cp "frappe_docker-backend-1:$source/." "$app_stage/"
+		docker exec -u root "$FRONTEND_CONTAINER" install -d -m 0755 \
+			-o frappe -g frappe "$target"
+		docker cp "$app_stage/." "$FRONTEND_CONTAINER:$target/"
+		docker exec -u root "$FRONTEND_CONTAINER" chown -R frappe:frappe "$target"
+		docker exec -u root "$FRONTEND_CONTAINER" find "$target" \
+			-type d -exec chmod 0755 '{}' '+'
+		docker exec -u root "$FRONTEND_CONTAINER" find "$target" \
+			-type f -exec chmod 0644 '{}' '+'
+		rm -rf -- "$app_stage"
+	done
 }
 
 if (( ! RUNTIME_ONLY )); then
@@ -237,6 +280,7 @@ if docker cp "frappe_docker-backend-1:$APP_IN_CONTAINER/$APP_NAME/public/." \
 	docker exec -u root frappe_docker-frontend-1 find \
 		"/home/frappe/frappe-bench/sites/assets/$APP_NAME" -type f -exec chmod 0644 '{}' '+'
 fi
+sync_frontend_dependency_assets
 
 if (( RESTART )); then
 	docker restart "${containers[@]}" >/dev/null

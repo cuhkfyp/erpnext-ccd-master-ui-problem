@@ -91,6 +91,20 @@ configuration with `nginx -t`, and performs an nginx configuration reload. It
 does not restart the frontend or any other container. The existing
 `erpnext_restart.sh` already restores `frappe_nginx_current.conf` after container
 recreation, and `deploy_ccd_portal.sh --runtime-only` revalidates and reapplies it.
+Nginx validation and reload must run as the container's `frappe` user. Running
+`nginx -t` as root in this image changes `/var/lib/nginx/{body,proxy,...}` to the
+compiled-in `nobody` user even though the live workers run as `frappe`. Requests
+larger than the 16 KiB in-memory body buffer then fail at nginx with an HTML 500
+before Frappe receives them. This makes small new DocTypes appear writable while
+larger existing DocTypes cannot be saved. The deployment/recovery script repairs
+all five private temp-directory owners to `frappe:frappe`, mode `0700`, before
+validating and reloading as `frappe`.
+
+After a container recreation, the frontend image can also contain older Chat and
+HRMS public bundles than the hashes in the shared asset manifest. The recovery
+flow copies those two apps' current public assets from the backend runtime into
+the frontend runtime without deleting unrelated assets. The nginx reload also
+re-resolves the `websocket` container name after its IP changes.
 
 Verify all three entry paths after deployment:
 
@@ -103,6 +117,11 @@ curl -sSIk -H 'Host: hksrfam.hksr.org.hk' https://127.0.0.1/app/
 Each response must be `302` with `Location: /app/home`; it must never contain
 the frontend container's `http://...:8080` address. Then verify `/app/home`
 returns Desk for an authenticated ERPNext user.
+
+Also require a request larger than 16 KiB to reach Frappe as JSON rather than an
+nginx HTML 500, require `/socket.io/?EIO=4&transport=polling` to return 200, and
+verify the exact Chat/HRMS bundle URLs in `assets.json` return their expected
+JavaScript or CSS MIME types instead of a 404 HTML page.
 
 ### Current Docker/SSHFS safeguards
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.15 - 2026-08-20
+
+- Prevent nginx validation from changing request-body temp-directory ownership
+  and repair the runtime permissions before every validated reload.
+- Restore current Chat and HRMS frontend bundles after container recreation and
+  re-resolve the websocket upstream without restarting the frontend container.
+
 ## 0.1.14 - 2026-08-19
 
 - Route the exact general site entry points `/`, `/app`, and `/app/` to Desk
