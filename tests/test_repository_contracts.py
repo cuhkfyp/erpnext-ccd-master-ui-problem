@@ -47,6 +47,7 @@ class RepositoryContractTests(unittest.TestCase):
 		).read_text(encoding="utf-8")
 		self.assertIn('MAPPING_OPTION = "ccd_portal_centre_key:', patch)
 		self.assertIn('get_meta("CCD Field Match").get_field("sys_fieldname")', patch)
+		self.assertIn("if not options_value.strip():", patch)
 		self.assertIn('option.partition(":")[0].strip() == "ccd_portal_centre_key"', patch)
 		self.assertIn("make_property_setter(", patch)
 		self.assertIn("validate_fields_for_doctype=False", patch)

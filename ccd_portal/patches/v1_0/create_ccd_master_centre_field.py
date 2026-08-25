@@ -36,7 +36,12 @@ def ensure_registration_mapping_option() -> None:
 	field = frappe.get_meta("CCD Field Match").get_field("sys_fieldname")
 	if not field or field.fieldtype != "Select":
 		return
-	options = str(field.options or "").splitlines()
+	options_value = str(field.options or "")
+	# An empty Select is populated dynamically by the CCD Registration Client Script.
+	# Keep its server-side options empty so Frappe does not enforce a stale allow-list.
+	if not options_value.strip():
+		return
+	options = options_value.splitlines()
 	if any(option.partition(":")[0].strip() == "ccd_portal_centre_key" for option in options):
 		return
 	options.append(MAPPING_OPTION)
