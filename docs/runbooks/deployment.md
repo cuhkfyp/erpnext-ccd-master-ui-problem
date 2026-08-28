@@ -47,8 +47,11 @@ host-owned nginx configuration; it leaves all unrelated nginx routes unchanged.
 
 The `sites/apps.txt` registration, installed-app row, portal DocTypes, audit
 records, corrections, governance configuration, and site-local secret live in
-the existing database/sites volumes. They are not copied into Git. After
-container recreation, verify the
+the existing database/sites volumes. They are not copied into Git. A sites
+volume restore can contain an older `apps.txt` even while the database still
+records `ccd_portal` as installed. The runtime recovery therefore atomically
+restores the missing registry line before clearing caches and reloading new
+web workers. After container recreation, verify the
 flag is still disabled, `bench --site frontend list-apps` contains `ccd_portal`,
 the four runtime copies exist, and the administrator bootstrap works before any
 further action. Never make an unrecorded portal edit only inside a container.
@@ -147,8 +150,13 @@ JavaScript or CSS MIME types instead of a 404 HTML page.
   runtime. This avoids a network-dependent editable install and is recreated by
   `deploy_ccd_portal.sh --runtime-only` after container replacement.
 - If an app-registry check fails, inspect and repair `sites/apps.txt` before any
-  restart. Confirm that every app is on its own line with `bench --site frontend
-  list-apps`; then reload only backend, scheduler, queue-long, and queue-short.
+  restart. This failure presents as a Frappe website 404 for `/ccd-portal` and
+  missing portal Desk DocTypes even though `frappe.get_installed_apps()` still
+  contains `ccd_portal`. Run `deploy_ccd_portal.sh --runtime-only`; it restores
+  the registry atomically. Confirm that every app is on its own line with
+  `bench --site frontend list-apps`; then reload only backend, scheduler,
+  queue-long, and queue-short if those processes were recreated outside the
+  controlled restart script.
 - A normal no-restart deployment gracefully reloads only the backend Gunicorn
   workers. A controlled `--restart` affects the four Python runtime containers.
   Confirm their prior state and the SSHFS mount after a container restart; do

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.16 - 2026-08-28
+
+- Restore the `ccd_portal` `sites/apps.txt` registry entry during both full
+  deployments and no-restart runtime recovery.
+- Document the generic Frappe 404 failure that occurs when the database still
+  records the app as installed but newly created workers exclude its missing
+  sites-volume registry entry.
+
 ## 0.1.15 - 2026-08-20
 
 - Prevent nginx validation from changing request-body temp-directory ownership

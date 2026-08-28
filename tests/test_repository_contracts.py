@@ -193,6 +193,11 @@ class RepositoryContractTests(unittest.TestCase):
 		self.assertIn("workers_reloaded", deploy)
 		self.assertIn("--runtime-only", deploy)
 		self.assertIn("--persist-only", deploy)
+		self.assertIn("ensure_runtime_app_registry()", deploy)
+		self.assertIn(
+			"done\n\nensure_runtime_app_registry\n\nif (( ! RUNTIME_ONLY )); then",
+			deploy,
+		)
 		self.assertIn("without touching Docker or the site", deploy)
 		self.assertIn("sshmount_docker_backend.sh", deploy)
 		self.assertIn('$APP_IN_CONTAINER/$APP_NAME/public/.', deploy)
