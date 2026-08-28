@@ -150,6 +150,19 @@ sync_frontend_dependency_assets() {
 	done
 }
 
+ensure_runtime_app_registry() {
+	# sites/apps.txt is host-volume state and can be restored from a snapshot that
+	# predates this app. Frappe excludes an installed app from new workers when
+	# its code exists but this registry line is missing, so repair it during both
+	# a normal deployment and --runtime-only recovery.
+	if ! docker exec frappe_docker-backend-1 grep -qx "$APP_NAME" \
+		/home/frappe/frappe-bench/sites/apps.txt; then
+		docker exec frappe_docker-backend-1 sh -c \
+			'file=/home/frappe/frappe-bench/sites/apps.txt; tmp="${file}.ccd-portal.$$"; awk "1" "$file" > "$tmp"; printf "%s\n" "$1" >> "$tmp"; mv "$tmp" "$file"' \
+			sh "$APP_NAME"
+	fi
+}
+
 if (( ! RUNTIME_ONLY )); then
 	python3 "$APP_ROOT/scripts/scan_repository.py"
 	python3 -m compileall -q "$APP_ROOT/ccd_portal"
@@ -184,6 +197,8 @@ for container in "${containers[@]}"; do
 		sh "$APP_IN_CONTAINER"
 done
 
+ensure_runtime_app_registry
+
 if (( ! RUNTIME_ONLY )); then
 	docker exec -u frappe -w "$APP_IN_CONTAINER/frontend" frappe_docker-backend-1 \
 		npm ci --no-audit --no-fund
@@ -217,12 +232,6 @@ if (( ! RUNTIME_ONLY )); then
 	fi
 	rm -rf -- "$build_stage"
 
-	if ! docker exec frappe_docker-backend-1 grep -qx "$APP_NAME" \
-		/home/frappe/frappe-bench/sites/apps.txt; then
-		docker exec frappe_docker-backend-1 sh -c \
-			'file=/home/frappe/frappe-bench/sites/apps.txt; tmp="${file}.ccd-portal.$$"; awk "1" "$file" > "$tmp"; printf "%s\n" "$1" >> "$tmp"; mv "$tmp" "$file"' \
-			sh "$APP_NAME"
-	fi
 	if ! docker exec frappe_docker-backend-1 "$BENCH" --site "$SITE" list-apps | grep -qx "$APP_NAME"; then
 		docker exec frappe_docker-backend-1 "$BENCH" --site "$SITE" install-app "$APP_NAME"
 	fi
