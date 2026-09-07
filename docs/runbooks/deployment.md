@@ -95,6 +95,17 @@ so an nginx-generated absolute redirect can otherwise expose the internal scheme
 and port. Guests reaching `/app/home` proceed through Frappe's normal login flow;
 authenticated staff reach Desk Home.
 
+The optional CCD Portal entry in Frappe's app menu uses
+`ccd_portal.security.has_portal_permission`. This hook runs while Desk builds
+the login response for every authenticated user, including users who have no
+CCD Portal profile. It must remain a silent boolean check: it may return
+`False`, but it must not call `frappe.throw` or otherwise add to
+`frappe.local.message_log`. A caught permission exception can still leave its
+message queued and display an unrelated "You are not permitted" popup after a
+successful login. Strict denial messages belong only to the session-authenticated
+portal API guards. After changing portal authorization, test a normal Desk user
+without a portal profile as well as an enabled portal user.
+
 The reviewed location block is stored in
 `deployment/nginx_frontend_route_overrides.conf`. The deployment script merges
 that bounded block into the existing host-owned
@@ -177,6 +188,10 @@ JavaScript or CSS MIME types instead of a 404 HTML page.
   deployment. A fresh `bench execute` or standalone Python process can load new
   source successfully while preloaded Gunicorn workers still serve the old
   module, producing a misleading browser `has no attribute` error.
+- If a user reaches Desk successfully but immediately sees a generic permission
+  popup, exercise the `add_to_apps_screen` permission hook and confirm it leaves
+  `frappe.local.message_log` unchanged for a user without a portal profile.
+  Do not weaken the portal API guards to solve an app-menu message leak.
 
 #### Duplicate SSHFS mount-layer case
 

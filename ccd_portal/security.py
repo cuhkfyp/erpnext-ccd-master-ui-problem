@@ -31,9 +31,30 @@ def _settings():
 
 
 def has_portal_permission() -> bool:
+	"""Return app-menu visibility without adding denial messages to Desk boot."""
+	user = getattr(frappe.session, "user", "Guest")
+	if user == "Guest":
+		return False
 	try:
-		require_context(allow_access_admin=True)
-		return True
+		enabled = cint(frappe.db.get_single_value("CCD Portal Settings", "enabled"))
+		if not enabled and user != "Administrator":
+			is_preview_user = frappe.db.exists(
+				"CCD Portal Pilot User",
+				{
+					"parent": "CCD Portal Settings",
+					"parenttype": "CCD Portal Settings",
+					"parentfield": "preview_users",
+					"user": user,
+				},
+			)
+			if not is_preview_user:
+				return False
+		authority = frappe.db.get_value(
+			"CCD Portal User Profile",
+			{"user": user, "active": 1},
+			"authority",
+		)
+		return authority in AUTHORITIES
 	except Exception:
 		return False
 

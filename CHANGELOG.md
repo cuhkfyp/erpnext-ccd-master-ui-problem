@@ -2,6 +2,11 @@
 
 ## Unreleased - 2026-09-07
 
+- Prevent the optional CCD Portal app-menu permission check from leaking its
+  generic access-denial message into successful Desk logins for staff who do
+  not have a portal profile. Portal API authorization remains fail-closed.
+- Add regression coverage proving that denied app-menu checks are silent and
+  that enabled and named-preview portal profiles remain visible.
 - Document the shared Frappe registry incident that caused all Desk users to
   see `Module CCD Portal not found` after a backend start.
 - Integrate the operational runbook with the general fail-closed registry
