@@ -31,7 +31,7 @@ A normal container restart retains them, but image/container recreation may not.
 The deployment therefore copies the reviewed application to the host-owned
 `/root/erpnext_docker_volume/persistent_apps/ccd_portal` directory and installs
 the idempotent host wrapper `/root/erpnext_docker_volume/deploy_ccd_portal.sh`.
-The existing ERPNext restart scripts conditionally invoke:
+After image/container recreation, restore the persistent portal package with:
 
 ```bash
 /root/erpnext_docker_volume/deploy_ccd_portal.sh --runtime-only --restart
@@ -44,6 +44,15 @@ workers, and remounts the existing backend SSHFS mount through
 `hksr`, Studio, site data, VPN settings, or other application code. It does
 maintain the three exact Desk-entry redirects described below in the existing
 host-owned nginx configuration; it leaves all unrelated nginx routes unchanged.
+
+For an ordinary dependency-ordered ERPNext stop/start, the installed
+`frappe_runtime_integrity.sh` guard now compares the site's database-installed
+apps with `sites/apps.txt`. The guarded `erpnext_restart.sh` runs its explicit
+`repair-registry` mode before stopping anything. It appends a missing app name
+only when that package already exists in backend, scheduler, and both queues;
+it never removes registry entries, deploys code, migrates data, or changes a
+feature flag. If container recreation also removed application code, the guard
+fails before the restart and the portal recovery command above must be run.
 
 The `sites/apps.txt` registration, installed-app row, portal DocTypes, audit
 records, corrections, governance configuration, and site-local secret live in
@@ -152,9 +161,11 @@ JavaScript or CSS MIME types instead of a 404 HTML page.
 - If an app-registry check fails, inspect and repair `sites/apps.txt` before any
   restart. This failure presents as a Frappe website 404 for `/ccd-portal` and
   missing portal Desk DocTypes even though `frappe.get_installed_apps()` still
-  contains `ccd_portal`. Run `deploy_ccd_portal.sh --runtime-only`; it restores
-  the registry atomically. Confirm that every app is on its own line with
-  `bench --site frontend list-apps`; then reload only backend, scheduler,
+  contains `ccd_portal`. The guarded `erpnext_restart.sh` repairs a registry-only
+  omission automatically when all runtime packages are present. If it reports
+  missing code, run `deploy_ccd_portal.sh --runtime-only`; that restores the
+  packages and registry atomically. Confirm that every app is on its own line
+  with `bench --site frontend list-apps`; then reload only backend, scheduler,
   queue-long, and queue-short if those processes were recreated outside the
   controlled restart script.
 - A normal no-restart deployment gracefully reloads only the backend Gunicorn

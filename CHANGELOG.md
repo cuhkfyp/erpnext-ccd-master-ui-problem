@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased - 2026-09-07
+
+- Document the shared Frappe registry incident that caused all Desk users to
+  see `Module CCD Portal not found` after a backend start.
+- Integrate the operational runbook with the general fail-closed registry
+  reconciliation guard: registry-only loss is repaired before a controlled
+  restart, while missing application code still requires the persistent portal
+  recovery command.
+
 ## 0.1.16 - 2026-08-28
 
 - Restore the `ccd_portal` `sites/apps.txt` registry entry during both full
