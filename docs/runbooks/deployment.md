@@ -226,6 +226,61 @@ approved maintenance window and rollback access.
 Promotion is blocked until development acceptance and the private security gate
 are signed off. Pin an exact reviewed commit; never deploy a floating branch.
 
+Use the host entry point below from the Development server. Its default action
+is a read-only preflight. Replace angle-bracket values with the target-owned
+values; do not save those values in Git.
+
+```bash
+export CCD_PORTAL_TARGET_ENV=uat
+export CCD_PORTAL_TARGET_HOST=<uat-host-or-address>
+export CCD_PORTAL_SOURCE_COMMIT=<full-reviewed-40-character-commit>
+/root/erpnext_docker_volume/Deploy_CCD_Portal.sh --preflight
+```
+
+After the preflight passes and the two release gates have documentary approval:
+
+```bash
+export CCD_PORTAL_DEVELOPMENT_ACCEPTED=1
+export CCD_PORTAL_PRIVATE_SECURITY_GATE_APPROVED=1
+/root/erpnext_docker_volume/Deploy_CCD_Portal.sh --deploy
+```
+
+The script accepts SSH keys by default and uses
+`ERPNEXT_SSH_PASSWORD_FILE` only when that file is readable. It supports the
+`CCD_PORTAL_TARGET_USER`, `CCD_PORTAL_TARGET_PORT`, `CCD_PORTAL_TARGET_SITE`,
+root, and container-name overrides listed by `--help`. `--allow-dirty` is only
+for an explicit uncommitted UAT rehearsal; a normal UAT promotion and every
+Production promotion must come from the pinned, clean revision.
+The preflight requires at least 4 GiB free on the target by default in addition
+to its file/code estimate; increase `CCD_PORTAL_MIN_FREE_GIB` when the target
+database or local backup policy requires a larger safety margin.
+
+The deployer handles either a first installation or an upgrade. It transfers
+only the application tree and its reviewed prebuilt assets. It does not copy
+Development database rows, site files, `site_config`, the site HMAC secret,
+users, centres, aliases, profiles, grants, policies, audit events, corrections,
+search indexes, source identities, URLs, or credentials. It also does not copy
+Development's nginx configuration or change the target's `/`, `/app`, or
+`/app/` routes. `/ccd-portal` is registered by the Frappe app itself.
+
+On the target, the deployer:
+
+1. Refuses an upgrade while the portal feature flag is enabled.
+2. Enables maintenance mode and creates a compressed full backup with files.
+3. Validates every new backup artifact before changing application code.
+4. Saves the prior persistent app, installs code atomically in backend,
+   scheduler, queue-long, and queue-short, and maintains `sites/apps.txt` plus
+   the local interpreter path.
+5. Installs the app when absent, runs migrations, creates the target-local HMAC
+   secret only when missing, and verifies the feature flag remains disabled.
+6. Copies the prebuilt portal assets to the frontend, restarts only the four
+   Python runtime containers, verifies imports, and disables maintenance mode.
+
+It never restarts the frontend, database, Redis, websocket, VPN, n8n, or any
+unrelated service. Release payloads, deployment receipts, code backups, and the
+deployment lock stay under `<target-root>/.ccd-portal-deploy`; Frappe's full
+backup remains under the target site's private backup directory.
+
 1. Back up the UAT database and sites volume; verify restore instructions.
 2. Record currently installed app versions and the prior `ccd_portal` commit.
 3. Deploy the pinned commit, migrate, and build.
@@ -243,7 +298,31 @@ review denial, reveal, coverage, error, and latency measures daily before any
 controlled expansion. Unpublish—but retain—the Studio prototype only after
 accepted cutover.
 
+Run the same preflight first with `CCD_PORTAL_TARGET_ENV=production`. A
+Production deployment additionally requires:
+
+```bash
+export CCD_PORTAL_TARGET_ENV=production
+export CCD_PORTAL_TARGET_HOST=<production-host-or-address>
+export CCD_PORTAL_SOURCE_COMMIT=<same-commit-accepted-on-uat>
+export CCD_PORTAL_DEVELOPMENT_ACCEPTED=1
+export CCD_PORTAL_PRIVATE_SECURITY_GATE_APPROVED=1
+export CCD_PORTAL_UAT_ACCEPTANCE_APPROVED=1
+export CCD_PORTAL_PRODUCTION_CHANGE_ID=<approved-change-reference>
+/root/erpnext_docker_volume/Deploy_CCD_Portal.sh --preflight
+/root/erpnext_docker_volume/Deploy_CCD_Portal.sh --deploy
+```
+
+Production refuses dirty source. Non-interactive `--yes` is also refused unless
+`CCD_PORTAL_PRODUCTION_NONINTERACTIVE_APPROVED=1` is explicitly present.
+
 ## Rollback
+
+The portable deployer automatically restores the previous code, app registry,
+and persistent copy when failure occurs before installation or migration starts.
+It then turns maintenance mode off. Once a schema operation has started, it does
+not guess at a reverse migration: it retains the matching new code, keeps
+maintenance mode on, and prints the verified target backup location.
 
 1. Disable `CCD Portal Settings.enabled` immediately.
 2. Preserve audit/correction records and application logs; do not delete evidence.

@@ -172,6 +172,7 @@ if (( ! RUNTIME_ONLY )); then
 		--exclude='**/__pycache__/' --exclude='*.py[co]' \
 		"$APP_ROOT/" "$PERSISTENT_APP/"
 	install -m 0755 "$APP_ROOT/deployment/deploy_development.sh" "$VOLUME_ROOT/deploy_ccd_portal.sh"
+	install -m 0755 "$APP_ROOT/deployment/Deploy_CCD_Portal.sh" "$VOLUME_ROOT/Deploy_CCD_Portal.sh"
 fi
 
 persist_nginx_route_overrides

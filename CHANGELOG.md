@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased - 2026-09-29
+
+- Add a guarded, code-only CCD Portal promotion script for UAT and Production.
+  It requires a pinned commit and release gates, validates Frappe/ERPNext
+  compatibility, creates a verified target-local full backup, installs or
+  upgrades the app, and leaves the portal feature flag disabled.
+- Install a stable `/root/erpnext_docker_volume/Deploy_CCD_Portal.sh` entry
+  point during Development deployments. The promotion payload excludes
+  Development data, site files, configuration, credentials, governance rows,
+  search indexes, and environment-specific nginx routes.
+
 ## Unreleased - 2026-09-07
 
 - Prevent the optional CCD Portal app-menu permission check from leaking its
