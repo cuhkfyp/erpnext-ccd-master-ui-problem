@@ -253,6 +253,8 @@ preflight() {
 		command -v tail >/dev/null
 		command -v seq >/dev/null
 		command -v date >/dev/null
+		command -v install >/dev/null
+		command -v python3 >/dev/null
 		for container in '$TARGET_BACKEND_CONTAINER' '$TARGET_SCHEDULER_CONTAINER' '$TARGET_QUEUE_LONG_CONTAINER' '$TARGET_QUEUE_SHORT_CONTAINER' '$TARGET_FRONTEND_CONTAINER'; do
 			docker inspect \"\$container\" >/dev/null
 		done
@@ -491,7 +493,7 @@ release_app="$release_root/app"
 	echo "Invalid CCD Portal release payload." >&2
 	exit 62
 }
-[[ -f "$release_app/ccd_portal/www/ccd_portal.html" ]] || {
+	[[ -f "$release_app/ccd_portal/www/ccd_portal.html" ]] || {
 	echo "Release payload is missing the portal entry point." >&2
 	exit 63
 }
@@ -612,6 +614,9 @@ enabled_after="$(docker exec "$backend_container" bench --site "$site" execute \
 	exit 68
 }
 
+runtime_recovery="$target_root/ccd_portal_runtime_recovery.sh"
+install -m 0755 "$persistent_app/deployment/recover_remote_runtime.sh" "$runtime_recovery"
+
 echo "Installing reviewed prebuilt portal assets without changing nginx routes..."
 docker exec -u root "$frontend_container" rm -rf -- "$frontend_incoming" "$frontend_previous"
 docker exec -u root "$frontend_container" install -d -m 0755 -o frappe -g frappe "$frontend_incoming"
@@ -660,6 +665,7 @@ done
 	printf 'portal_enabled=0\n'
 	printf 'development_data_transferred=no\n'
 	printf 'nginx_routes_changed=no\n'
+	printf 'runtime_recovery=%s\n' "$runtime_recovery"
 	printf 'backup_files=\n'
 	printf '  %s\n' "${new_backups[@]}"
 } > "$release_root/deployment-result.txt"
@@ -667,6 +673,7 @@ done
 echo "CCD Portal deployment completed: $release_id"
 echo "Verified target backup files remain in: $backup_dir"
 echo "Code rollback archive: ${persistent_backup:-none-first-install}"
+echo "Container-recreation recovery: $runtime_recovery --restore"
 echo "The portal feature flag remains disabled; configure target-owned governance and indexes before access."
 echo "No Development database, files, configuration, identities, grants, policies, or secrets were transferred."
 REMOTE_INSTALL

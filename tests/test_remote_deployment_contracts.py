@@ -82,6 +82,25 @@ class RemoteDeploymentContractTests(unittest.TestCase):
 		self.assertNotIn('docker restart "$frontend_container"', self.deploy)
 		self.assertNotIn("docker compose down", self.deploy)
 
+	def test_container_recreation_has_a_target_local_recovery_path(self):
+		recovery_path = ROOT / "deployment" / "recover_remote_runtime.sh"
+		recovery = recovery_path.read_text(encoding="utf-8")
+		result = subprocess.run(
+			["bash", "-n", str(recovery_path)],
+			check=False,
+			capture_output=True,
+			text=True,
+		)
+		self.assertEqual(result.returncode, 0, result.stderr)
+		self.assertIn("ccd_portal_runtime_recovery.sh", self.deploy)
+		self.assertIn("--restore", recovery)
+		self.assertIn('docker restart "${containers[@]}"', recovery)
+		self.assertNotIn('docker restart "$FRONTEND_CONTAINER"', recovery)
+		self.assertNotIn("bench --site \"$SITE\" migrate", recovery)
+		self.assertNotIn("ensure_site_secret", recovery)
+		self.assertNotIn("nginx -", recovery)
+		self.assertNotIn("frappe_nginx_current", recovery)
+
 	def test_stable_wrapper_is_installed_by_development_deploy(self):
 		development = (ROOT / "deployment" / "deploy_development.sh").read_text(encoding="utf-8")
 		self.assertIn('Deploy_CCD_Portal.sh" "$VOLUME_ROOT/Deploy_CCD_Portal.sh', development)

@@ -10,6 +10,9 @@
   point during Development deployments. The promotion payload excludes
   Development data, site files, configuration, credentials, governance rows,
   search indexes, and environment-specific nginx routes.
+- Install a target-local runtime recovery helper from the persistent app so
+  container recreation can restore only CCD Portal code, registration, and
+  assets without migrations or changes to target-owned configuration.
 
 ## Unreleased - 2026-09-07
 

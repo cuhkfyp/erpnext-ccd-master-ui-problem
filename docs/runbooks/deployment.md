@@ -281,6 +281,24 @@ unrelated service. Release payloads, deployment receipts, code backups, and the
 deployment lock stay under `<target-root>/.ccd-portal-deploy`; Frappe's full
 backup remains under the target site's private backup directory.
 
+The deployer also installs the target-local recovery helper below from the
+same persistent application copy:
+
+```bash
+/root/erpnext_docker_volume/ccd_portal_runtime_recovery.sh --check
+/root/erpnext_docker_volume/ccd_portal_runtime_recovery.sh --restore
+```
+
+An ordinary `docker restart` retains container files, so no restore is needed.
+After container recreation or an image replacement, bring the five Frappe
+containers up and run `--check`; run `--restore` when it reports an incomplete
+runtime. Restore mode temporarily enables maintenance, copies only CCD Portal
+code/interpreter registration/assets, restarts only the four Python runtime
+containers, verifies imports, and preserves a maintenance state that was
+already enabled. Add this bounded restore call to any target-owned recreation
+script; do not replace that server's broader restart workflow with a
+Development-server script.
+
 1. Back up the UAT database and sites volume; verify restore instructions.
 2. Record currently installed app versions and the prior `ccd_portal` commit.
 3. Deploy the pinned commit, migrate, and build.
