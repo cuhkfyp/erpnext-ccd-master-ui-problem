@@ -240,6 +240,8 @@ if (( ! RUNTIME_ONLY )); then
 	docker exec frappe_docker-backend-1 "$BENCH" --site "$SITE" execute \
 		ccd_portal.install.ensure_site_secret
 	docker exec frappe_docker-backend-1 "$BENCH" --site "$SITE" execute \
+		ccd_portal.identity.schema_status
+	docker exec frappe_docker-backend-1 "$BENCH" --site "$SITE" execute \
 		ccd_portal.install.ensure_development_administrator
 	docker exec frappe_docker-backend-1 "$BENCH" build --app "$APP_NAME"
 fi

@@ -10,7 +10,7 @@ def get_active_policy() -> tuple[dict, list[dict]]:
 	policies = frappe.get_all(
 		"CCD Portal Policy",
 		filters={"status": "Active"},
-		fields=["name", "policy_version", "title", "activated_on"],
+		fields=["name", "policy_version", "title", "same_person_enabled", "activated_on"],
 		order_by="activated_on desc",
 		limit=2,
 	)
@@ -21,6 +21,7 @@ def get_active_policy() -> tuple[dict, list[dict]]:
 		"CCD Portal Field Policy",
 		filters={"parent": policy.name, "parenttype": "CCD Portal Policy", "parentfield": "fields"},
 		fields=[
+			"source",
 			"fieldname",
 			"label",
 			"classification",
@@ -52,6 +53,7 @@ def public_policy(policy: dict, fields: list[dict], authority: str) -> dict:
 		"title": policy["title"],
 		"fields": [
 			{
+				"source": row.get("source") or "CCD Master",
 				"fieldname": row["fieldname"],
 				"label": row["label"],
 				"classification": row["classification"],

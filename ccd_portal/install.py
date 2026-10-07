@@ -9,7 +9,10 @@ def after_install() -> None:
 	settings.administrator_preview = 1
 	settings.searches_per_hour = 60
 	settings.reveals_per_hour = 20
+	settings.concerns_per_hour = 10
 	settings.reveal_ttl_seconds = 120
+	settings.same_person_enabled = 0
+	settings.flags.same_person_governance = True
 	settings.save(ignore_permissions=True)
 	ensure_initial_draft_policy()
 	ensure_development_administrator()
@@ -23,9 +26,11 @@ def ensure_external_schema() -> None:
 	"""Idempotently maintain the one governed field and portal query indexes."""
 	from ccd_portal.patches.v1_0.add_database_indexes import execute as add_database_indexes
 	from ccd_portal.patches.v1_0.create_ccd_master_centre_field import execute as create_centre_field
+	from ccd_portal.patches.v2_0.add_same_person_indexes import execute as add_same_person_indexes
 
 	create_centre_field()
 	add_database_indexes()
+	add_same_person_indexes()
 
 
 def ensure_site_secret() -> dict:
@@ -108,6 +113,7 @@ def ensure_initial_draft_policy() -> None:
 	meta = frappe.get_meta("CCD Master")
 	fields = [
 		{
+			"source": "CCD Master",
 			"fieldname": fieldname,
 			"label": label,
 			"classification": classification,

@@ -11,6 +11,8 @@ Review at least daily during pilot and after every deployment:
 - failed audit inserts and application error logs;
 - search p50/p95 (acceptance p95 at most 2 seconds) and detail p95 (at most 1 second);
 - response count invariant (at most 20) and HTTP 429 volume.
+- same-person schema/index readiness, assigned portal records, eligible
+  multi-record people, revalidation suppressions, anomalies, and concern states;
 
 Audit retention is indefinite until HKSR approves a duration. No automatic log
 clearing hook is configured for portal events.
@@ -24,7 +26,8 @@ the HMAC secret may be exposed, or ordinary staff can reach generic CCD Master.
 
 ## Incident sequence
 
-1. Disable the feature flag. If necessary invalidate affected Frappe sessions.
+1. Disable the global same-person flag for an identity-specific incident, or the
+   portal feature flag for a wider incident. If necessary invalidate affected sessions.
 2. Preserve database, audit, reverse-proxy, and application evidence with access
    restricted to the incident team. Never paste PII into tickets/chat.
 3. Determine affected users, centres, opaque record IDs, event types, and time

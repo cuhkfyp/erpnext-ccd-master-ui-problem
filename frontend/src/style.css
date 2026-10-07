@@ -51,6 +51,10 @@ button, input, select, textarea { font: inherit; }
 .secondary { color:#234432; background:#e7f0eb; }.danger { color:#842029; background:#f8d7da; }
 .results { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr)); gap:1rem; margin-top:1rem; }
 .result { cursor:pointer; transition:transform .15s,border-color .15s; }.result:hover { transform:translateY(-2px); border-color:#82a890; }
+.person-result { display:flex; flex-direction:column; gap:.8rem; }
+.person-heading { color:#164b31; }
+.grouped-record { border:1px solid #dfe7e2; border-radius:.7rem; padding:1rem; }
+.direct-match { background:#d7e9dd; font-weight:650; }
 .record-fields { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(210px,100%),1fr)); gap:.8rem; }
 .record-field { border-left:3px solid #bdd3c5; padding:.25rem .7rem; min-width:0; }
 .record-field small { display:block; color:#69766f; }.record-field strong { overflow-wrap:anywhere; }

@@ -143,7 +143,7 @@ def ensure_record_access(portal_record_id: str, context: PortalContext) -> dict:
 		centre_clause = f" AND rc.centre IN ({placeholders})"
 
 	query = f"""
-		SELECT r.name, r.portal_record_id, r.ccd_master_record, r.source_modified,
+		SELECT r.name, r.portal_record_id, r.ccd_master_record, r.policy_version, r.source_modified,
 		       GROUP_CONCAT(DISTINCT rc.centre ORDER BY rc.centre) AS centres
 		  FROM `tabCCD Portal Record` r
 		  JOIN `tabCCD Portal Record Centre` rc ON rc.portal_record = r.name
@@ -151,7 +151,7 @@ def ensure_record_access(portal_record_id: str, context: PortalContext) -> dict:
 		   AND (rc.effective_from IS NULL OR rc.effective_from <= %(today)s)
 		   AND (rc.effective_to IS NULL OR rc.effective_to >= %(today)s)
 		   {centre_clause}
-		 GROUP BY r.name, r.portal_record_id, r.ccd_master_record, r.source_modified
+		 GROUP BY r.name, r.portal_record_id, r.ccd_master_record, r.policy_version, r.source_modified
 		 LIMIT 1
 	"""
 	values: dict | list

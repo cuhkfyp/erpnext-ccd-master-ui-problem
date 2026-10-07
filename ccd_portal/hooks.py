@@ -5,6 +5,10 @@ app_description = "Governed staff portal for targeted CCD Master access"
 app_email = "digital@rehabsociety.org.hk"
 app_license = "mit"
 
+doctype_js = {
+	"CCD Portal Identity Concern": "public/js/ccd_portal_identity_concern.js",
+}
+
 required_apps = ["frappe", "erpnext"]
 
 after_install = "ccd_portal.install.after_install"

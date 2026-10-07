@@ -236,7 +236,7 @@ validate_local_source() {
 }
 
 preflight() {
-	local local_list remote_list installed_list local_version remote_version target_enabled
+	local local_list remote_list installed_list local_version remote_version target_enabled target_same_person_enabled
 	validate_local_source
 	log "Running read-only target preflight for $REMOTE ($TARGET_SITE)"
 	local_list="$(local_apps)"
@@ -298,6 +298,12 @@ preflight() {
 		target_enabled="${target_enabled//$'\r'/}"
 		[[ "$target_enabled" != "1" ]] || \
 			die "Target CCD Portal is enabled. Disable it before deploying code or migrations."
+		target_same_person_enabled="$(remote_run docker exec "$TARGET_BACKEND_CONTAINER" \
+			bench --site "$TARGET_SITE" execute frappe.db.get_single_value \
+			--args '["CCD Portal Settings","same_person_enabled"]' | tail -n 1)"
+		target_same_person_enabled="${target_same_person_enabled//$'\r'/}"
+		[[ "$target_same_person_enabled" != "1" ]] || \
+			die "Target same-person rollout is enabled. Disable it before deploying code or migrations."
 		log "Target upgrade detected; portal feature flag is disabled"
 	else
 		log "Target first installation detected; the portal will be installed disabled"
@@ -511,6 +517,12 @@ if docker exec "$backend_container" bench --site "$site" execute frappe.get_inst
 		echo "Target portal became enabled after preflight; deployment refused." >&2
 		exit 64
 	}
+	current_same_person_enabled="$(docker exec "$backend_container" bench --site "$site" execute \
+		frappe.db.get_single_value --args '["CCD Portal Settings","same_person_enabled"]' | tail -n 1)"
+	[[ "${current_same_person_enabled//$'\r'/}" != "1" ]] || {
+		echo "Target same-person rollout became enabled after preflight; deployment refused." >&2
+		exit 64
+	}
 fi
 
 echo "Enabling target maintenance mode..."
@@ -607,10 +619,19 @@ echo "Migrating the target site..."
 docker exec "$backend_container" bench --site "$site" migrate
 docker exec "$backend_container" bench --site "$site" execute ccd_portal.install.ensure_site_secret >/dev/null
 
+echo "Checking governed identity schema readiness (informational while V2 is disabled)..."
+docker exec "$backend_container" bench --site "$site" execute ccd_portal.identity.schema_status
+
 enabled_after="$(docker exec "$backend_container" bench --site "$site" execute \
 	frappe.db.get_single_value --args '["CCD Portal Settings","enabled"]' | tail -n 1)"
 [[ "${enabled_after//$'\r'/}" != "1" ]] || {
 	echo "Portal feature flag is enabled after migration; refusing to continue." >&2
+	exit 68
+}
+same_person_after="$(docker exec "$backend_container" bench --site "$site" execute \
+	frappe.db.get_single_value --args '["CCD Portal Settings","same_person_enabled"]' | tail -n 1)"
+[[ "${same_person_after//$'\r'/}" != "1" ]] || {
+	echo "Same-person rollout flag is enabled after migration; refusing to continue." >&2
 	exit 68
 }
 
@@ -663,6 +684,7 @@ done
 	printf 'source_git_revision=%s\n' "$source_revision"
 	printf 'target_environment=%s\n' "$target_env"
 	printf 'portal_enabled=0\n'
+	printf 'same_person_enabled=0\n'
 	printf 'development_data_transferred=no\n'
 	printf 'nginx_routes_changed=no\n'
 	printf 'runtime_recovery=%s\n' "$runtime_recovery"

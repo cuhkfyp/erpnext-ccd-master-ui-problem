@@ -6,6 +6,9 @@ import unicodedata
 from datetime import date
 
 
+UNIFIED_PERSON_PATTERN = re.compile(r"^HKSR-U([0-9]{9})([0-9])$")
+
+
 def canonical_json(value) -> str:
 	return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
 
@@ -13,6 +16,33 @@ def canonical_json(value) -> str:
 def is_valid_source_column(value: str) -> bool:
 	"""Accept only an unquoted SQL identifier that the existing agent can select safely."""
 	return bool(re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,139}", str(value or "")))
+
+
+def unified_person_check_digit(payload: str) -> int:
+	"""Return the Luhn check digit for a nine-digit Unified Person payload."""
+	payload = str(payload or "")
+	if len(payload) != 9 or not payload.isdigit():
+		raise ValueError("Unified Person payload must contain nine digits")
+	digits = payload + "0"
+	total = 0
+	parity = len(digits) % 2
+	for index, character in enumerate(digits):
+		value = int(character)
+		if index % 2 == parity:
+			value *= 2
+			if value > 9:
+				value -= 9
+		total += value
+	return (10 - total % 10) % 10
+
+
+def is_valid_unified_person_number(value: str) -> bool:
+	"""Validate the canonical ``HKSR-U#########C`` format and check digit."""
+	match = UNIFIED_PERSON_PATTERN.fullmatch(str(value or "").strip())
+	if not match:
+		return False
+	payload, supplied = match.groups()
+	return int(payload) > 0 and unified_person_check_digit(payload) == int(supplied)
 
 
 def normalize_value(value, kind: str) -> str:

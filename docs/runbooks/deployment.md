@@ -305,12 +305,18 @@ Development-server script.
 4. Configure UAT-owned centres, aliases, profiles, grants, identities, URLs, and
    secret through controlled administration—not fixtures or Git.
 5. Build indexes and obtain 100% coverage for the selected two-centre cohort.
-6. Run the complete [two-centre UAT](../uat/two-centre-acceptance.md).
+6. Run `bench --site <site> execute ccd_portal.identity.schema_status` and require
+   `ready: true` before activating a V2 policy or either rollout gate. Missing
+   db_connector identity tables leave ordinary direct portal search available.
+7. Clone the active policy to a V2 draft, review it, and have a System Manager
+   activate it with a reason. Configure named pilots separately; keep the global
+   same-person flag off through deployment and initial UAT.
+8. Run the complete [two-centre UAT](../uat/two-centre-acceptance.md).
 
 ## Production pilot
 
 After UAT acceptance, take and verify a production backup, deploy the same pinned
-commit, and migrate while the flag is disabled. Configure only a named pilot
+commit, and migrate while both the portal and global same-person flags are disabled. Configure only a named pilot
 cohort. Rebuild/validate coverage, enable the flag in an approved window, then
 review denial, reveal, coverage, error, and latency measures daily before any
 controlled expansion. Unpublish—but retain—the Studio prototype only after
@@ -343,13 +349,15 @@ not guess at a reverse migration: it retains the matching new code, keeps
 maintenance mode on, and prints the verified target backup location.
 
 1. Disable `CCD Portal Settings.enabled` immediately.
-2. Preserve audit/correction records and application logs; do not delete evidence.
-3. If code-only rollback is sufficient, deploy the previously recorded commit,
+2. Disable `CCD Portal Settings.same_person_enabled`; named pilots are inert when
+   the active policy or identity schema is not ready.
+3. Preserve audit/correction/identity-concern records and application logs; do not delete evidence.
+4. If code-only rollback is sufficient, deploy the previously recorded commit,
    rebuild assets, clear cache, and restart runtime containers.
-4. If the migration must be reversed, stop writes and restore the verified
+5. If the migration must be reversed, stop writes and restore the verified
    pre-deployment database/sites backup. Frappe schema migrations are not assumed
    reversible in place.
-5. Re-run the isolation smoke tests before any re-enable. Record the incident and
+6. Re-run the isolation smoke tests before any re-enable. Record the incident and
    rollback decision as governance evidence.
 
 The application does not delete the hidden CCD Master centre field, Studio

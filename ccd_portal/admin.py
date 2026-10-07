@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import frappe
 from frappe import _
-from frappe.utils import now_datetime
+from frappe.utils import cint, now_datetime
 
 from ccd_portal.audit import audit_denial, write_event
+from ccd_portal.identity import identity_coverage, schema_status
 from ccd_portal.indexing import coverage_report, refresh_source
+from ccd_portal.policy import get_active_policy
 from ccd_portal.primitives import is_valid_source_column
 from ccd_portal.security import (
 	AUTHORITIES,
@@ -338,6 +340,7 @@ def reference_options():
 				row.user,
 				f"{row.user} — {row.authority}",
 				active=bool(row.active),
+				authority=row.authority,
 			)
 			for row in profiles
 		],
@@ -572,10 +575,11 @@ def list_policies():
 	context = _administrator_context("Administration Read")
 	rows = frappe.get_all(
 		"CCD Portal Policy",
-		fields=["name", "policy_version", "title", "status", "activated_on", "modified"],
+		fields=["name", "policy_version", "title", "same_person_enabled", "status", "activated_on", "modified"],
 		order_by="modified desc",
 	)
 	field_names = [
+		"source",
 		"fieldname",
 		"label",
 		"classification",
@@ -599,13 +603,20 @@ def list_policies():
 
 
 @frappe.whitelist()
-def save_draft_policy(policy_version: str, title: str, fields=None, name: str | None = None):
+def save_draft_policy(
+	policy_version: str,
+	title: str,
+	fields=None,
+	name: str | None = None,
+	same_person_enabled: int = 0,
+):
 	require_post()
 	context = _administrator_context("Policy Draft Change")
 	fields = frappe.parse_json(fields) if isinstance(fields, str) else fields
 	if not isinstance(fields, list) or not fields:
 		frappe.throw(_("A policy requires field rules."), frappe.ValidationError)
 	allowed = {
+		"source",
 		"fieldname",
 		"label",
 		"classification",
@@ -619,11 +630,14 @@ def save_draft_policy(policy_version: str, title: str, fields=None, name: str | 
 	}
 	if any(not isinstance(row, dict) or set(row) - allowed for row in fields):
 		frappe.throw(_("Invalid policy rule."), frappe.ValidationError)
+	for row in fields:
+		row["source"] = row.get("source") or "CCD Master"
 	if name:
 		doc = frappe.get_doc("CCD Portal Policy", name)
 		if doc.status != "Draft":
 			frappe.throw(_("Activated policies are immutable."), frappe.PermissionError)
 		doc.title = title
+		doc.same_person_enabled = cint(same_person_enabled)
 		doc.set("fields", fields)
 		doc.save(ignore_permissions=True)
 	else:
@@ -632,6 +646,7 @@ def save_draft_policy(policy_version: str, title: str, fields=None, name: str | 
 				"doctype": "CCD Portal Policy",
 				"policy_version": policy_version,
 				"title": title,
+				"same_person_enabled": cint(same_person_enabled),
 				"status": "Draft",
 				"fields": fields,
 			}
@@ -646,6 +661,59 @@ def save_draft_policy(policy_version: str, title: str, fields=None, name: str | 
 
 
 @frappe.whitelist()
+def clone_active_policy_to_v2(policy_version: str, title: str):
+	"""Create an audited V2 draft without mutating the active V1 policy."""
+	require_post()
+	context = _administrator_context("Policy V2 Clone")
+	policy_version = str(policy_version or "").strip()
+	title = str(title or "").strip()
+	if not policy_version or len(policy_version) > 140 or not title or len(title) > 140:
+		frappe.throw(_("Enter a valid V2 policy version and title."), frappe.ValidationError)
+	if frappe.db.exists("CCD Portal Policy", policy_version):
+		frappe.throw(_("That policy version already exists."), frappe.ValidationError)
+	active, fields = get_active_policy()
+	cloned_fields = [
+		{
+			**row,
+			"source": row.get("source") or "CCD Master",
+		}
+		for row in fields
+		if (row.get("source") or "CCD Master") == "CCD Master"
+	]
+	cloned_fields.append(
+		{
+			"source": "Unified Person",
+			"fieldname": "unified_person_number",
+			"label": "Unified Person Number",
+			"classification": "Identity",
+			"data_kind": "Identifier",
+			"mask_strategy": "Last 4",
+			"reveal_authorities": "Operator,Data Steward",
+			"searchable": 1,
+			"strong_identifier": 1,
+			"correctable": 0,
+			"display_order": max((cint(row.get("display_order")) for row in cloned_fields), default=0) + 10,
+		}
+	)
+	doc = frappe.get_doc(
+		{
+			"doctype": "CCD Portal Policy",
+			"policy_version": policy_version,
+			"title": title,
+			"same_person_enabled": 1,
+			"status": "Draft",
+			"fields": cloned_fields,
+		}
+	).insert(ignore_permissions=True)
+	write_event(
+		"Policy V2 Clone",
+		context=context,
+		metadata={"source_policy": active["name"], "policy": doc.name, "version": doc.policy_version},
+	)
+	return {"name": doc.name, "policy_version": doc.policy_version, "status": doc.status}
+
+
+@frappe.whitelist()
 def activate_policy(policy_name: str, reason: str):
 	require_post()
 	context = require_system_manager(reason)
@@ -653,6 +721,11 @@ def activate_policy(policy_name: str, reason: str):
 	doc = frappe.get_doc("CCD Portal Policy", policy_name)
 	if doc.status != "Draft":
 		frappe.throw(_("Only a draft policy can be activated."), frappe.ValidationError)
+	if doc.same_person_enabled and not schema_status()["ready"]:
+		frappe.throw(
+			_("The governed identity schema and indexes must be ready before activating a V2 policy."),
+			frappe.ValidationError,
+		)
 	for active_name in frappe.get_all("CCD Portal Policy", filters={"status": "Active"}, pluck="name"):
 		frappe.db.set_value("CCD Portal Policy", active_name, "status", "Retired", update_modified=False)
 	frappe.db.set_value(
@@ -674,8 +747,92 @@ def activate_policy(policy_name: str, reason: str):
 def get_coverage():
 	context = _administrator_context("Coverage Report Opened")
 	report = coverage_report()
+	active = frappe.get_all(
+		"CCD Portal Policy",
+		filters={"status": "Active"},
+		fields=["name", "same_person_enabled"],
+		limit=2,
+	)
+	policy = dict(active[0]) if len(active) == 1 else {"same_person_enabled": 0}
+	settings = frappe.get_single("CCD Portal Settings")
+	report["same_person"] = identity_coverage(settings, policy)
 	write_event("Coverage Report Opened", context=context, metadata={"coverage_percent": report["coverage_percent"]})
 	return report
+
+
+@frappe.whitelist()
+def get_same_person_rollout():
+	context = _administrator_context("Same Person Rollout Read")
+	settings = frappe.get_single("CCD Portal Settings")
+	result = {
+		"global_enabled": bool(cint(settings.same_person_enabled)),
+		"pilot_users": sorted(row.user for row in (settings.same_person_pilot_users or []) if row.user),
+		"identity_schema": schema_status(),
+	}
+	write_event(
+		"Same Person Rollout Read",
+		context=context,
+		metadata={
+			"global_enabled": result["global_enabled"],
+			"pilot_count": len(result["pilot_users"]),
+			"schema_ready": result["identity_schema"]["ready"],
+		},
+	)
+	return result
+
+
+@frappe.whitelist()
+def set_same_person_pilots(users=None):
+	require_post()
+	context = _administrator_context("Same Person Pilot Change")
+	users = frappe.parse_json(users) if isinstance(users, str) else users
+	if not isinstance(users, list) or len(users) > 200:
+		frappe.throw(_("Select a valid pilot-user list."), frappe.ValidationError)
+	users = sorted({str(user or "").strip() for user in users if str(user or "").strip()})
+	for user in users:
+		profile = frappe.db.get_value(
+			"CCD Portal User Profile", {"user": user, "active": 1}, "authority"
+		)
+		if profile not in {"Reader", "Operator", "Data Steward"}:
+			frappe.throw(_("Every same-person pilot must have an active client-data profile."), frappe.ValidationError)
+	settings = frappe.get_single("CCD Portal Settings")
+	settings.set("same_person_pilot_users", [{"user": user} for user in users])
+	settings.flags.same_person_governance = True
+	settings.save(ignore_permissions=True)
+	write_event(
+		"Same Person Pilot Change",
+		context=context,
+		protected_value=users,
+		metadata={"pilot_count": len(users)},
+	)
+	return {"pilot_users": users}
+
+
+@frappe.whitelist()
+def set_same_person_global(enabled: int, reason: str):
+	"""System Manager activation is separate from Access Administrator pilots."""
+	require_post()
+	try:
+		context = require_system_manager(reason)
+	except Exception:
+		audit_denial("Same Person Global Change")
+		raise
+	reason = clean_reason(reason)
+	enabled = bool(cint(enabled))
+	if enabled:
+		policy, _ = get_active_policy()
+		if not policy.get("same_person_enabled"):
+			frappe.throw(_("Activate a V2 same-person policy first."), frappe.ValidationError)
+		if not schema_status()["ready"]:
+			frappe.throw(_("The governed identity schema and indexes are not ready."), frappe.ValidationError)
+	frappe.db.set_single_value("CCD Portal Settings", "same_person_enabled", int(enabled))
+	write_event(
+		"Same Person Global Change",
+		context=context,
+		protected_value=reason,
+		metadata={"enabled": enabled},
+	)
+	return {"global_enabled": enabled}
 
 
 @frappe.whitelist()

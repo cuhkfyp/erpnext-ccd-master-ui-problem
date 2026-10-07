@@ -85,6 +85,9 @@ check_runtime() {
 	done
 	docker exec "$BACKEND_CONTAINER" grep -qx ccd_portal "$APPS_TXT" || failed=1
 	docker exec "$FRONTEND_CONTAINER" test -f "$FRONTEND_ASSETS/ccd-portal/index.html" || failed=1
+	printf '[CCD Portal runtime recovery] Identity readiness (required only before V2 activation):\n'
+	docker exec "$BACKEND_CONTAINER" bench --site "$SITE" execute \
+		ccd_portal.identity.schema_status || failed=1
 	if [[ "$failed" == "0" ]]; then
 		printf '[CCD Portal runtime recovery] Runtime is complete.\n'
 		return 0

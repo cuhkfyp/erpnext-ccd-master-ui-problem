@@ -5,18 +5,29 @@
 | Action | Reader | Operator | Data Steward | Access Administrator | System Manager |
 |---|---:|---:|---:|---:|---:|
 | Targeted exact search | Yes, granted centres | Yes, granted centres | Yes, granted centres | No | Audited break glass only |
+| Unified Number lookup / same-person expansion | V2 rollout, granted centres | V2 rollout, granted centres | V2 rollout, granted centres | No | No ordinary client search |
 | Masked detail | Yes | Yes | Yes | No | Audited break glass only |
 | Reason-based reveal | No | Policy fields | Policy fields | No | Audited break glass only |
 | Submit correction | No | Yes | Yes | No | No ordinary submission |
+| Submit suspected wrong-link concern | No | Yes, visible grouped records | Yes, visible grouped records | No | Review only |
 | Approve/reject correction | No | No | Granted centres; never own request | No | Explicit audited override |
 | Manage centres, aliases, source profiles, profiles, grants, reveal reasons | No | No | No | Yes | Existing administrative power |
 | Draft field policy | No | No | No | Yes | Existing administrative power |
+| Manage named same-person pilots | No | No | No | Yes | Existing administrative power |
+| Enable global same-person rollout | No | No | No | No | Yes, with reason and ready schema |
 | Activate field policy/index refresh | No | No | No | No | Yes, with reason |
 | Coverage report | No | No | No | Aggregate only | Existing administrative power |
 
 Grade never grants a centre. Every ordinary client-data action requires an
 active profile and an effective explicit user-centre grant. A record must have
 at least one active/effective relation intersecting those grants.
+
+Unified Person membership is only a relationship; it never grants access. A
+V2 result independently rechecks every sibling's active portal record, active
+centre relation, and the caller's effective explicit centre grants. Users see
+no count or label for inaccessible siblings. Direct exact matches remain
+available when identity tables are missing, unavailable, or unsafe for the
+affected person.
 
 Source profiles may use audited fixed centres only when every record from that
 registration belongs to all selected centres. Mixed sources require per-record
@@ -41,6 +52,7 @@ requires HKSR approval and is not shipped as live configuration.
 | Residential/postal address fields | No | Full | Operator, Steward | If source workflow permits |
 | Contact-person names and phones | No | Initials / last 4 | Operator, Steward | If source workflow permits |
 | Source keys, matching evidence, internal history | Never | Not returned | Never | Never |
+| Unified Person Number (virtual governed field) | Exact, alone | Last 4 | Operator, Steward; selected record only | Never |
 
 Every result and detail field is masked according to the active versioned
 policy. `mask_strategy` never has a clear-text option. Policy activation retires

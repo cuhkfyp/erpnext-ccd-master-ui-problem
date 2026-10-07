@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased - 2026-10-07
+
+- Add governed V2 same-person search over live Unified Person assignments with
+  current-state revalidation/conflict vetoes, active alias lookup, deterministic
+  20-record grouping, and independent record/centre authorization.
+- Add the immutable Unified Person Number policy rule, audited V2 policy clone,
+  separate pilot/global rollout controls, and aggregate-only readiness coverage.
+- Add encrypted suspected wrong-link concerns, reporter-only status visibility,
+  qualified Desk review, and immutable audit events without copying CCD PII or
+  fuzzy evidence.
+- Keep db_connector optional for direct masked search and add fail-closed schema,
+  index, deployment, recovery, and two-centre UAT checks for V2 activation.
+
 ## Unreleased - 2026-09-29
 
 - Add a guarded, code-only CCD Portal promotion script for UAT and Production.

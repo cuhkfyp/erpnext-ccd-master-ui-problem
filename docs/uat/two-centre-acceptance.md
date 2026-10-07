@@ -25,6 +25,14 @@ For each row, retain only pass/fail evidence and opaque IDs.
 | Inactive profile | Generic denial |
 | Profile with no/expired grant | Generic denial |
 | Reader A exact-searches A record | At most 20 masked results; no raw PII/source keys |
+| Reader A searches either grouped sibling email | Same accessible confirmed-person group; each record retains its own values |
+| Reader A searches a valid Unified Person Number or active alias | Canonical masked person result; lookup is the only criterion |
+| Reader A searches malformed/enumerated Unified Numbers | Validation/no-accessible-result behavior; no existence signal |
+| Reader A sees one A sibling of an A+B person | One record only; no relationship label, hidden count, or indication B exists |
+| Explicit A+B user sees the same person | Both independently authorized records and the confirmed relationship label |
+| Current identity membership/group needs revalidation | Direct identifier match only; Unified Number lookup returns no accessible result |
+| Duplicate active Unified membership or conflicting current groups | Expansion suppressed only for the affected person |
+| Deleted/reinserted stable lineage with no new active group | Existing canonical Unified Person still expands when otherwise eligible |
 | Reader A exact-searches B record | Same response shape as no match |
 | Reader A guesses B opaque ID | Generic denial and immutable denial event |
 | Reader attempts reveal/correction | Denied |
@@ -32,6 +40,10 @@ For each row, retain only pass/fail evidence and opaque IDs.
 | Operator uses missing/invalid reveal reason | Denied; no values |
 | 21st reveal / 61st search in an hour | HTTP 429 and audit event |
 | Operator submits correctable change | Encrypted proposal; CCD Master unchanged |
+| Operator selects 2–20 grouped records and reports wrong link | Encrypted concern submitted; identity/access state unchanged |
+| Reader attempts wrong-link concern | Denied and audited |
+| Reporter opens identity concerns | Own concern IDs/statuses only; no reviewer metadata or sibling data |
+| Sensitive reviewer changes concern status | Valid transition and immutable audit event |
 | Operator tries approval | Denied |
 | Steward A reviews another A request | Reasoned temporary comparison available |
 | Steward tries own request | Denied and audited |
@@ -47,6 +59,8 @@ For each row, retain only pass/fail evidence and opaque IDs.
 | SQL/XSS payload in criteria/context | Parameterized/escaped; no execution or stored script |
 | Cross-site unsafe request without CSRF | Rejected by Frappe |
 | Deliberate audit insertion failure | Protected action fails without returning data |
+| Identity table outage or missing required index | Direct masked search continues; no expansion or Unified Number results |
+| Disabled V2 pilot/global gate | Existing portal search continues without same-person expansion |
 | System Manager override without reason | Rejected |
 | System Manager override with reason | Distinct Break Glass Override audit event |
 

@@ -19,6 +19,7 @@
         <nav class="tabs" aria-label="Portal sections">
           <button class="tab" :class="{active:view==='search'}" @click="view='search'">{{ __('Targeted search') }}</button>
           <button v-if="canCorrect" class="tab" :class="{active:view==='corrections'}" @click="openCorrections">{{ boot.user.authority === 'Data Steward' ? __('Correction queue') : __('My corrections') }}</button>
+          <button v-if="canReportConcern" class="tab" :class="{active:view==='concerns'}" @click="openConcerns">{{ __('My identity concerns') }}</button>
         </nav>
 
         <template v-if="view === 'search'">
@@ -38,7 +39,7 @@
                 </div>
               </div>
               <div class="actions">
-                <button type="button" class="secondary" :disabled="criteria.length >= 5" @click="criteria.push({fieldname:'',value:''})">{{ __('Add criterion') }}</button>
+                <button type="button" class="secondary" :disabled="criteria.length >= 5 || hasUnifiedCriterion" @click="criteria.push({fieldname:'',value:''})">{{ __('Add criterion') }}</button>
                 <button class="primary" :disabled="busy">{{ busy ? __('Searching…') : __('Search') }}</button>
               </div>
             </form>
@@ -46,12 +47,17 @@
 
           <div v-if="searched && !results.length" class="card"><h3>{{ __('No accessible records found') }}</h3><p class="muted">{{ __('Check the exact criteria. Results outside your explicit centre grants are intentionally indistinguishable from no match.') }}</p></div>
           <section v-if="results.length" aria-live="polite">
-            <p class="muted">{{ results.length }} {{ __('masked result(s); maximum 20') }}</p>
+            <p class="muted">{{ searchRecordCount }} {{ __('masked record(s); maximum 20') }}</p>
             <div class="results">
-              <article v-for="record in results" :key="record.id" class="card result" tabindex="0" @click="openDetail(record.id)" @keydown.enter="openDetail(record.id)">
-                <div><span v-for="centre in record.centres" :key="centre" class="pill">{{ centre }}</span></div>
-                <div class="record-fields"><div v-for="field in record.fields.slice(0,6)" :key="field.fieldname" class="record-field"><small>{{ field.label }}</small><strong>{{ field.value || '—' }}</strong></div></div>
-              </article>
+              <section v-for="group in results" :key="group.person_id" class="card person-result">
+                <div v-if="group.relationship_label" class="person-heading"><strong>{{ group.relationship_label }}</strong></div>
+                <div v-if="group.person_fields.length" class="record-fields"><div v-for="field in group.person_fields" :key="field.fieldname" class="record-field"><small>{{ field.label }}</small><strong>{{ field.value || '—' }}</strong></div></div>
+                <article v-for="record in group.records" :key="record.id" class="result grouped-record" tabindex="0" @click="openDetail(record.id)" @keydown.enter="openDetail(record.id)">
+                  <div><span v-if="record.direct_match" class="pill direct-match">{{ __('Direct match') }}</span><span v-for="centre in record.centres" :key="centre" class="pill">{{ centre }}</span></div>
+                  <div class="record-fields"><div v-for="field in record.fields.slice(0,6)" :key="field.fieldname" class="record-field"><small>{{ field.label }}</small><strong>{{ field.value || '—' }}</strong></div></div>
+                </article>
+                <div v-if="canReportConcern && group.records.length > 1" class="actions"><button class="secondary" @click="openConcern(group)">{{ __('Report suspected wrong link') }}</button></div>
+              </section>
             </div>
           </section>
 
@@ -61,6 +67,7 @@
               <button class="tab" :class="{active:detailSection==='details'}" @click="detailSection='details'">{{ __('Details') }}</button>
               <button v-if="contactFields.length" class="tab" :class="{active:detailSection==='contact'}" @click="detailSection='contact'">{{ __('Contact Information') }}</button>
             </nav>
+            <div v-if="displayPersonFields.length" class="record-fields" style="margin-top:1rem"><div v-for="field in displayPersonFields" :key="field.fieldname" class="record-field"><small>{{ field.label }}</small><strong>{{ field.value || '—' }}</strong></div></div>
             <div v-if="detailSection === 'details'" class="record-fields" style="margin-top:1rem"><div v-for="field in detailFields" :key="field.fieldname" class="record-field"><small>{{ field.label }}</small><strong>{{ field.value || '—' }}</strong></div></div>
             <template v-else>
               <section v-for="group in contactGroups" :key="group.label" class="detail-group">
@@ -73,10 +80,15 @@
           </section>
         </template>
 
-        <section v-else class="card">
+        <section v-else-if="view === 'corrections'" class="card">
           <h2>{{ boot.user.authority === 'Data Steward' ? __('Scoped correction queue') : __('My correction requests') }}</h2>
           <p class="muted">{{ __('Approved changes must be applied manually in the authoritative source. Later synchronization reconciles the request.') }}</p>
           <div class="table-wrap"><table class="data-table"><thead><tr><th>{{ __('Request') }}</th><th>{{ __('Record') }}</th><th>{{ __('Fields') }}</th><th>{{ __('Reason') }}</th><th>{{ __('Status') }}</th><th v-if="boot.user.authority==='Data Steward'">{{ __('Action') }}</th></tr></thead><tbody><tr v-for="row in correctionRows" :key="row.name"><td>{{ row.name }}</td><td>{{ row.portal_record_id }}</td><td>{{ row.changed_fields }}</td><td>{{ row.reason }}</td><td>{{ row.status }}</td><td v-if="boot.user.authority==='Data Steward'"><button v-if="row.status==='Proposed'" class="secondary" @click="openDecision(row)">{{ __('Review') }}</button></td></tr></tbody></table></div>
+        </section>
+        <section v-else class="card">
+          <h2>{{ __('My identity concerns') }}</h2>
+          <p class="muted">{{ __('Concern submission does not change grouping or access. Qualified identity reviewers handle it through the governed workflow.') }}</p>
+          <div class="table-wrap"><table class="data-table"><thead><tr><th>{{ __('Concern') }}</th><th>{{ __('Submitted') }}</th><th>{{ __('Status') }}</th></tr></thead><tbody><tr v-for="row in concernRows" :key="row.name"><td>{{ row.name }}</td><td>{{ row.creation }}</td><td>{{ row.status }}</td></tr></tbody></table></div>
         </section>
       </template>
     </main>
@@ -84,6 +96,8 @@
     <div v-if="showReveal" class="modal-backdrop" @click.self="showReveal=false"><form class="modal" @submit.prevent="doReveal"><h2>{{ __('Reason-based PII reveal') }}</h2><div class="field"><label for="reason-code">{{ __('Approved reason') }}</label><select id="reason-code" v-model="revealForm.reason_code" required><option value="" disabled>{{ __('Select a reason') }}</option><option v-for="reason in boot.reveal_reasons" :key="reason.reason_code" :value="reason.reason_code">{{ reason.label }}</option></select></div><div class="field" style="margin-top:.8rem"><label for="reveal-context">{{ __('Optional context') }}</label><textarea id="reveal-context" v-model="revealForm.context_note" maxlength="500"></textarea></div><div class="actions"><button class="primary" :disabled="busy">{{ __('Reveal temporarily') }}</button><button type="button" class="secondary" @click="showReveal=false">{{ __('Cancel') }}</button></div></form></div>
 
     <div v-if="showCorrection" class="modal-backdrop" @click.self="showCorrection=false"><form class="modal" @submit.prevent="submitCorrection"><h2>{{ __('Correction request') }}</h2><p class="muted">{{ __('This does not modify CCD Master. A different scoped Data Steward must decide it.') }}</p><div v-if="selected?.centres.length > 1" class="field"><label for="correction-centre">{{ __('Approval centre') }}</label><select id="correction-centre" v-model="correctionForm.centre" required><option value="" disabled>{{ __('Select the centre responsible for this request') }}</option><option v-for="centre in selected.centres" :key="centre" :value="centre">{{ centre }}</option></select></div><div v-for="field in correctableFields" :key="field.fieldname" class="field" style="margin-top:.7rem"><label><input v-model="correctionForm.selected[field.fieldname]" type="checkbox" /> {{ __('Propose a change to') }} {{ field.label }}</label><input v-if="correctionForm.selected[field.fieldname]" :id="`change-${field.fieldname}`" v-model="correctionForm.changes[field.fieldname]" autocomplete="off" :aria-label="field.label" /></div><div class="field" style="margin-top:.8rem"><label for="correction-reason">{{ __('Reason') }}</label><textarea id="correction-reason" v-model="correctionForm.reason" maxlength="500" required></textarea></div><div class="actions"><button class="primary" :disabled="busy">{{ __('Submit request') }}</button><button type="button" class="secondary" @click="showCorrection=false">{{ __('Cancel') }}</button></div></form></div>
+
+    <div v-if="concernGroup" class="modal-backdrop" @click.self="closeConcern"><form class="modal" @submit.prevent="submitConcern"><h2>{{ __('Report suspected wrong link') }}</h2><p class="muted">{{ __('Select 2–20 visible records from this confirmed group. Filing does not suspend the grouping.') }}</p><div v-for="(record,index) in concernGroup.records" :key="record.id" class="field" style="margin-top:.6rem"><label class="check-control"><input v-model="concernForm.record_ids" type="checkbox" :value="record.id" /><span>{{ __('Record') }} {{ index + 1 }} · {{ record.centres.join(', ') }}</span></label></div><div class="field" style="margin-top:.8rem"><label for="concern-reason">{{ __('Reason') }}</label><textarea id="concern-reason" v-model="concernForm.reason" maxlength="500" required></textarea></div><div class="actions"><button class="primary" :disabled="busy">{{ __('Submit concern') }}</button><button type="button" class="secondary" @click="closeConcern">{{ __('Cancel') }}</button></div></form></div>
 
     <div v-if="decisionRequest" class="modal-backdrop" @click.self="closeDecision"><form class="modal" @submit.prevent="submitDecision"><h2>{{ __('Steward decision') }}</h2><p>{{ decisionRequest.name }}</p><template v-if="!decisionReview"><div class="field"><label for="review-reason">{{ __('Approved reveal reason') }}</label><select id="review-reason" v-model="reviewForm.reason_code" required><option value="" disabled>{{ __('Select a reason') }}</option><option v-for="reason in boot.reveal_reasons" :key="reason.reason_code" :value="reason.reason_code">{{ reason.label }}</option></select></div><div class="field" style="margin-top:.8rem"><label for="review-context">{{ __('Optional context') }}</label><textarea id="review-context" v-model="reviewForm.context_note" maxlength="500"></textarea></div><div class="actions"><button type="button" class="primary" :disabled="busy" @click="loadCorrectionReview">{{ __('Reveal comparison temporarily') }}</button><button type="button" class="secondary" @click="closeDecision">{{ __('Cancel') }}</button></div></template><template v-else><p class="notice">{{ __('Sensitive comparison clears automatically. Decide only after checking the authoritative source workflow.') }}</p><div class="table-wrap"><table class="data-table"><thead><tr><th>{{ __('Field') }}</th><th>{{ __('Current') }}</th><th>{{ __('Proposed') }}</th></tr></thead><tbody><tr v-for="row in decisionReview.comparison" :key="row.fieldname"><td>{{ row.label }}</td><td>{{ row.current_value || '—' }}</td><td>{{ row.proposed_value || '—' }}</td></tr></tbody></table></div><div class="field" style="margin-top:.8rem"><label for="decision">{{ __('Decision') }}</label><select id="decision" v-model="decisionForm.decision"><option>Approve</option><option>Reject</option></select></div><div class="field" style="margin-top:.8rem"><label for="decision-reason">{{ __('Decision reason') }}</label><textarea id="decision-reason" v-model="decisionForm.reason" maxlength="500" required></textarea></div><div class="actions"><button class="primary" :disabled="busy">{{ __('Record decision') }}</button><button type="button" class="secondary" @click="closeDecision">{{ __('Cancel') }}</button></div></template></form></div>
   </div>
@@ -97,18 +111,22 @@ import AdminPanel from "./components/AdminPanel.vue";
 const __ = (text) => text;
 const sessionAuthenticated = Boolean(window.ccd_portal_authenticated);
 const loading = ref(true), busy = ref(false), error = ref(""), message = ref(""), boot = ref(null), unauthenticated = ref(!sessionAuthenticated), view = ref("search"), detailSection = ref("details");
-const criteria = reactive([{fieldname:"",value:""}]), results = ref([]), searched = ref(false), selected = ref(null), revealed = ref(null), revealSeconds = ref(0), correctionRows = ref([]);
-const showReveal = ref(false), showCorrection = ref(false), decisionRequest = ref(null), decisionReview = ref(null);
+const criteria = reactive([{fieldname:"",value:""}]), results = ref([]), searchRecordCount = ref(0), searched = ref(false), selected = ref(null), revealed = ref(null), revealSeconds = ref(0), correctionRows = ref([]), concernRows = ref([]);
+const showReveal = ref(false), showCorrection = ref(false), decisionRequest = ref(null), decisionReview = ref(null), concernGroup = ref(null);
 const revealForm = reactive({reason_code:"",context_note:""});
 const correctionForm = reactive({changes:{},selected:{},reason:"",centre:""});
 const decisionForm = reactive({decision:"Approve",reason:""});
 const reviewForm = reactive({reason_code:"",context_note:""});
+const concernForm = reactive({record_ids:[],reason:""});
 let revealTimer = null, countdownTimer = null, reviewTimer = null;
 const searchFields = computed(() => boot.value?.policy?.fields?.filter((field) => field.searchable) || []);
 const canReveal = computed(() => ["Operator","Data Steward"].includes(boot.value?.user.authority));
 const canCorrect = computed(() => ["Operator","Data Steward"].includes(boot.value?.user.authority));
+const canReportConcern = computed(() => Boolean(boot.value?.can_report_identity_concern));
+const hasUnifiedCriterion = computed(() => criteria.some((row) => searchFields.value.find((field) => field.fieldname === row.fieldname)?.source === "Unified Person"));
 const correctableFields = computed(() => selected.value?.fields.filter((field) => field.correctable) || []);
 const displayFields = computed(() => { if (!selected.value) return []; const raw = Object.fromEntries((revealed.value?.fields || []).map((field) => [field.fieldname,field.value])); return selected.value.fields.map((field) => ({...field,value:Object.hasOwn(raw,field.fieldname)?raw[field.fieldname]:field.value})); });
+const displayPersonFields = computed(() => { const fields=revealed.value?.person_fields?.length ? revealed.value.person_fields : selected.value?.person_fields; return fields || []; });
 const contactFields = computed(() => displayFields.value.filter((field) => field.classification === "Contact"));
 const detailFields = computed(() => displayFields.value.filter((field) => field.classification !== "Contact"));
 const contactGroups = computed(() => [
@@ -121,17 +139,21 @@ function inputType(fieldname) { const kind=searchFields.value.find((f)=>f.fieldn
 function clearReveal() { revealed.value=null; revealSeconds.value=0; if(revealTimer) clearTimeout(revealTimer); if(countdownTimer) clearInterval(countdownTimer); revealTimer=null; countdownTimer=null; }
 function clearSelected() { clearReveal(); selected.value=null; detailSection.value="details"; }
 function setError(e) { error.value=e.message || __("The request could not be completed."); unauthenticated.value=e.status===401 || (!sessionAuthenticated && e.status===403); }
-async function runSearch() { busy.value=true; error.value=""; message.value=""; clearSelected(); try { const data=await call("ccd_portal.api.search",{criteria:criteria.map((row)=>({...row}))}); results.value=data.results; searched.value=true; criteria.forEach((row)=>row.value=""); } catch(e){setError(e);} finally{busy.value=false;} }
+async function runSearch() { busy.value=true; error.value=""; message.value=""; clearSelected(); try { const data=await call("ccd_portal.api.search",{criteria:criteria.map((row)=>({...row}))}); results.value=data.results; searchRecordCount.value=data.record_count; searched.value=true; criteria.forEach((row)=>row.value=""); } catch(e){setError(e);} finally{busy.value=false;} }
 async function openDetail(id) { busy.value=true; error.value=""; clearReveal(); detailSection.value="details"; try { selected.value=await call("ccd_portal.api.detail",{record_id:id}); selected.value && window.scrollTo({top:document.body.scrollHeight,behavior:"smooth"}); } catch(e){setError(e);} finally{busy.value=false;} }
 async function doReveal() { busy.value=true; error.value=""; try { revealed.value=await call("ccd_portal.api.reveal",{record_id:selected.value.id,...revealForm}); revealSeconds.value=revealed.value.expires_in; showReveal.value=false; revealForm.reason_code=""; revealForm.context_note=""; countdownTimer=setInterval(()=>revealSeconds.value=Math.max(0,revealSeconds.value-1),1000); revealTimer=setTimeout(clearReveal,revealed.value.expires_in*1000); } catch(e){setError(e);} finally{busy.value=false;} }
 function openCorrection() { correctionForm.changes={}; correctionForm.selected={}; correctionForm.reason=""; correctionForm.centre=selected.value?.centres.length===1?selected.value.centres[0]:""; showCorrection.value=true; }
 async function submitCorrection() { const changes=Object.fromEntries(Object.keys(correctionForm.selected).filter((fieldname)=>correctionForm.selected[fieldname]).map((fieldname)=>[fieldname,correctionForm.changes[fieldname] ?? ""])); busy.value=true; error.value=""; try { const response=await call("ccd_portal.api.submit_correction",{record_id:selected.value.id,changes,reason:correctionForm.reason,centre:correctionForm.centre}); showCorrection.value=false; message.value=`${__("Correction request submitted")}: ${response.request_id}`; } catch(e){setError(e);} finally{busy.value=false;} }
-async function openCorrections() { view.value="corrections"; busy.value=true; error.value=""; try { correctionRows.value=(await call("ccd_portal.api.corrections",{},false)).requests; } catch(e){setError(e);} finally{busy.value=false;} }
+async function openCorrections() { clearReveal(); view.value="corrections"; busy.value=true; error.value=""; try { correctionRows.value=(await call("ccd_portal.api.corrections",{},false)).requests; } catch(e){setError(e);} finally{busy.value=false;} }
+function openConcern(group) { clearReveal(); concernGroup.value=group; concernForm.record_ids=group.records.map((record)=>record.id); concernForm.reason=""; }
+function closeConcern() { concernGroup.value=null; concernForm.record_ids=[]; concernForm.reason=""; }
+async function submitConcern() { if(concernForm.record_ids.length<2)return; busy.value=true; error.value=""; try { const response=await call("ccd_portal.api.submit_identity_concern",{record_ids:[...concernForm.record_ids],reason:concernForm.reason}); closeConcern(); message.value=`${__("Identity concern submitted")}: ${response.concern_id}`; } catch(e){setError(e);} finally{busy.value=false;} }
+async function openConcerns() { clearReveal(); view.value="concerns"; busy.value=true; error.value=""; try { concernRows.value=(await call("ccd_portal.api.identity_concerns",{},false)).concerns; } catch(e){setError(e);} finally{busy.value=false;} }
 function openDecision(row) { decisionRequest.value=row; decisionReview.value=null; reviewForm.reason_code=""; reviewForm.context_note=""; decisionForm.reason=""; }
 function closeDecision() { decisionRequest.value=null; decisionReview.value=null; if(reviewTimer) clearTimeout(reviewTimer); reviewTimer=null; }
 async function loadCorrectionReview() { busy.value=true; error.value=""; try { decisionReview.value=await call("ccd_portal.api.correction_detail",{request_id:decisionRequest.value.name,...reviewForm}); reviewTimer=setTimeout(closeDecision,decisionReview.value.expires_in*1000); } catch(e){setError(e);} finally{busy.value=false;} }
 async function submitDecision() { if(!decisionReview.value)return; busy.value=true; error.value=""; try { await call("ccd_portal.api.decide_correction",{request_id:decisionRequest.value.name,...decisionForm}); closeDecision(); decisionForm.reason=""; message.value=__("Decision recorded and audited."); await openCorrections(); } catch(e){setError(e);} finally{busy.value=false;} }
 function visibilityChanged() { if(document.hidden) { clearReveal(); closeDecision(); } }
 onMounted(async()=>{ if(!sessionAuthenticated){loading.value=false;return;} document.addEventListener("visibilitychange",visibilityChanged); try{boot.value=await call("ccd_portal.api.bootstrap",{},false);}catch(e){setError(e);}finally{loading.value=false;} });
-onBeforeUnmount(()=>{clearReveal();closeDecision();document.removeEventListener("visibilitychange",visibilityChanged);});
+onBeforeUnmount(()=>{clearReveal();closeDecision();closeConcern();document.removeEventListener("visibilitychange",visibilityChanged);});
 </script>

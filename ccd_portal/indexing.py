@@ -139,6 +139,10 @@ def index_record(ccd_master_name: str) -> dict:
 	policy, field_policies = get_active_policy()
 
 	record = _get_or_create_portal_record(doc)
+	frappe.db.set_value(
+		"CCD Portal Record", record.name, "policy_version", policy["policy_version"], update_modified=False
+	)
+	record.policy_version = policy["policy_version"]
 	frappe.db.delete("CCD Portal Search Token", {"portal_record": record.name})
 	frappe.db.delete("CCD Portal Record Centre", {"portal_record": record.name})
 
