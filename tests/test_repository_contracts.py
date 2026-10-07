@@ -234,6 +234,9 @@ class RepositoryContractTests(unittest.TestCase):
 			self.assertIn(f"location = {route} {{", nginx_routes)
 		self.assertEqual(nginx_routes.count("absolute_redirect off;"), 3)
 		self.assertEqual(nginx_routes.count("return 302 /app/home;"), 3)
+		self.assertIn("error_page 418 = @webserver;", nginx_routes)
+		self.assertIn("if ($request_method !~ ^(GET|HEAD)$) {", nginx_routes)
+		self.assertEqual(nginx_routes.count("return 418;"), 1)
 
 	def test_sshmount_recovery_is_layer_aware_and_bounded(self):
 		script = (ROOT / "deployment" / "sshmount_docker_backend.sh").read_text(encoding="utf-8")
