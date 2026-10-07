@@ -17,6 +17,12 @@ from ccd_portal.security import (
 	require_system_manager,
 )
 from ccd_portal.source_identity import canonical_source_id, same_source_lineage
+from ccd_portal.source_refresh import (
+	assert_source_refresh_available,
+	disable_source_relations,
+	operation_for_source,
+	queue_source_refresh,
+)
 
 CENTRE_MAPPING_FIELDNAME = "ccd_portal_centre_key"
 CENTRE_MAPPING_OPTION = "ccd_portal_centre_key: CCD Portal Canonical Centre Key"
@@ -103,16 +109,7 @@ def _resource(resource: str):
 
 def _invalidate_source_relations(source_registration: str) -> None:
 	"""Fail closed after a source assignment changes, until its index is refreshed."""
-	source_id = canonical_source_id(source_registration)
-	frappe.db.sql(
-		"""
-		UPDATE `tabCCD Portal Record Centre` rc
-		JOIN `tabCCD Portal Record` r ON r.name = rc.portal_record
-		   SET rc.active = 0
-		 WHERE r.source_registration = %s AND rc.active = 1
-		""",
-		(source_id,),
-	)
+	disable_source_relations(source_registration)
 
 
 def _is_centre_mapping_target(value: str | None) -> bool:
@@ -255,6 +252,7 @@ def list_resources(resource: str):
 			)
 			row["fixed_centres_display"] = ", ".join(row.fixed_centres) or "—"
 			row.update(_mapping_status(row))
+			row.update(operation_for_source(row.source_registration, context.user))
 	write_event("Administration Read", context=context, metadata={"resource": resource})
 	return {"resource": resource, "rows": [dict(row) for row in rows]}
 
@@ -423,6 +421,8 @@ def upsert_resource(resource: str, values=None, name: str | None = None):
 		action = "Created"
 	if resource == "source_profiles":
 		_invalidate_source_relations(doc.source_registration)
+		frappe.db.set_value("CCD Portal Source Profile", doc.name, "sync_pending", 1)
+		doc.sync_pending = 1
 	write_event(
 		"Administration Change",
 		context=context,
@@ -443,19 +443,22 @@ def upsert_resource(resource: str, values=None, name: str | None = None):
 
 @frappe.whitelist()
 def upsert_source_profile_and_refresh(values=None, name: str | None = None, reason: str = ""):
-	"""Atomically save one source assignment and rebuild its governed index."""
+	"""Save one source assignment and queue its fail-closed governed rebuild."""
 	require_post()
-	require_system_manager(reason)
+	context = require_system_manager(reason)
 	reason = clean_reason(reason)
+	parsed_values = frappe.parse_json(values) if isinstance(values, str) else values
+	if not isinstance(parsed_values, dict):
+		frappe.throw(_("Invalid source configuration."), frappe.ValidationError)
+	assert_source_refresh_available(str(parsed_values.get("source_registration") or ""))
 	result = upsert_resource("source_profiles", values, name)
-	frappe.db.set_value("CCD Portal Source Profile", result["name"], "sync_pending", 0)
-	refresh = refresh_index(reason, result["source_registration"], _strict=True)
-	if refresh["unmapped"] or refresh["failed"]:
-		frappe.throw(
-			_("The source assignment was not saved because its index could not be rebuilt completely."),
-			frappe.ValidationError,
-		)
-	return {"source_profile": result, "refresh": refresh}
+	refresh_operation = queue_source_refresh(
+		profile_name=result["name"],
+		source=result["source_registration"],
+		reason=reason,
+		context=context,
+	)
+	return {"source_profile": result, "refresh_operation": refresh_operation}
 
 
 @frappe.whitelist()
@@ -477,10 +480,10 @@ def configure_source(values=None, name: str | None = None, authoritative_centre_
 	source_registration = str(values.get("source_registration") or "").strip()
 	if not source_registration or frappe.db.get_value("CCD Registration", source_registration, "docstatus") != 1:
 		frappe.throw(_("Select a submitted CCD Registration."), frappe.ValidationError)
+	assert_source_refresh_available(source_registration)
 
 	if values.get("assignment_mode") == "Fixed Centres":
 		result = upsert_source_profile_and_refresh(values, name, reason)
-		frappe.db.set_value("CCD Portal Source Profile", result["source_profile"]["name"], "sync_pending", 0)
 		return {**result, "sync_required": False}
 
 	if values.get("assignment_mode") != "Per-record Centre Key":
@@ -529,14 +532,22 @@ def configure_source(values=None, name: str | None = None, authoritative_centre_
 		}
 
 	result = upsert_resource("source_profiles", values, name)
-	frappe.db.set_value("CCD Portal Source Profile", result["name"], "sync_pending", 0)
-	refresh = _strict_refresh(source_registration, reason, context)
-	return {"source_profile": result, "refresh": refresh, "sync_required": False}
+	refresh_operation = queue_source_refresh(
+		profile_name=result["name"],
+		source=source_registration,
+		reason=reason,
+		context=context,
+	)
+	return {
+		"source_profile": result,
+		"refresh_operation": refresh_operation,
+		"sync_required": False,
+	}
 
 
 @frappe.whitelist()
 def complete_source_sync(source: str, reason: str):
-	"""Open a pending per-record source only after complete key coverage and indexing."""
+	"""Queue opening a pending per-record source after complete key coverage."""
 	require_post()
 	_administrator_context("Source Sync Completion")
 	context = require_system_manager(reason)
@@ -559,15 +570,19 @@ def complete_source_sync(source: str, reason: str):
 			),
 			frappe.ValidationError,
 		)
-	frappe.db.set_value("CCD Portal Source Profile", profile.name, "sync_pending", 0)
-	refresh = _strict_refresh(source, reason, context)
-	write_event(
-		"Source Sync Completed",
+	refresh_operation = queue_source_refresh(
+		profile_name=profile.name,
+		source=source,
+		reason=reason,
 		context=context,
-		protected_value={"source": source, "reason": reason},
-		metadata={**coverage, "indexed": refresh["indexed"]},
+		completion_event="Source Sync Completed",
 	)
-	return {"source": source, "refresh": refresh, **coverage, "sync_pending": False}
+	return {
+		"source": source,
+		"refresh_operation": refresh_operation,
+		**coverage,
+		"sync_pending": True,
+	}
 
 
 @frappe.whitelist()
@@ -844,6 +859,20 @@ def refresh_index(reason: str, source: str | None = None, source_keys=None, _str
 		source_keys = frappe.parse_json(source_keys) if isinstance(source_keys, str) else source_keys
 		if not isinstance(source_keys, list) or len(source_keys) > 1000:
 			frappe.throw(_("Invalid source key batch."), frappe.ValidationError)
+	if source and not source_keys and not _strict:
+		profile = frappe.db.get_value(
+			"CCD Portal Source Profile",
+			{"source_registration": source, "active": 1},
+			"name",
+		)
+		if not profile:
+			frappe.throw(_("Select an active source assignment."), frappe.ValidationError)
+		return queue_source_refresh(
+			profile_name=profile,
+			source=source,
+			reason=reason,
+			context=context,
+		)
 	result = refresh_source(source, source_keys, strict=bool(_strict))
 	write_event(
 		"Index Refresh",

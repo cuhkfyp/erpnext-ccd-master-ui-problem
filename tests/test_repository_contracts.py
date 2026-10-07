@@ -144,7 +144,8 @@ class RepositoryContractTests(unittest.TestCase):
 		self.assertIn('"canonical_source_id"', panel)
 		self.assertIn("Stable CCD source", panel)
 		self.assertIn('type:"datalist"', panel)
-		self.assertIn('ccd_portal.admin.refresh_index', panel)
+		self.assertIn('ccd_portal.source_refresh.start_source_refresh', panel)
+		self.assertIn('ccd_portal.source_refresh.get_source_refresh', panel)
 		self.assertIn('ccd_portal.admin.configure_source', panel)
 		self.assertIn('ccd_portal.admin.complete_source_sync', panel)
 		self.assertIn('"fixed_centres_display"', admin)
@@ -156,14 +157,36 @@ class RepositoryContractTests(unittest.TestCase):
 		self.assertIn('"sync_pending", 1', admin)
 		self.assertIn('"index_refresh_required": resource == "source_profiles"', admin)
 		self.assertIn("def upsert_source_profile_and_refresh", admin)
-		self.assertIn("The source assignment was not saved", admin)
-		self.assertIn('_strict=True', admin)
+		self.assertIn("queue_source_refresh", admin)
+		self.assertIn('"sync_pending", 1', admin)
 		self.assertIn('profile["assignment_mode"] == "Fixed Centres"', indexing)
 		self.assertIn('profile.get("sync_pending")', indexing)
 		self.assertIn("if strict:", indexing)
 		self.assertIn("Save and refresh index", panel)
 		self.assertIn("Complete sync and refresh", panel)
 		self.assertIn('"reason": "fixed_centres"', indexing)
+
+	def test_large_source_refresh_is_background_paged_and_fail_closed(self):
+		refresh = (ROOT / "ccd_portal" / "source_refresh.py").read_text()
+		security = (ROOT / "ccd_portal" / "security.py").read_text()
+		api = (ROOT / "ccd_portal" / "api.py").read_text()
+		panel = (ROOT / "frontend" / "src" / "components" / "AdminPanel.vue").read_text()
+		for token in (
+			'queue="long"',
+			"enqueue_after_commit=True",
+			"PAGE_SIZE = 250",
+			"publish=False",
+			"frappe.db.commit()",
+			'"status": "Completed"',
+			'"status": "Failed"',
+			"source_changed_during_refresh",
+			"policy_changed_during_refresh",
+		):
+			self.assertIn(token, refresh)
+		self.assertIn("COALESCE(sp.sync_pending, 0) = 0", security)
+		self.assertIn("COALESCE(sp.sync_pending, 0) = 0", api)
+		self.assertIn("Background index refresh", panel)
+		self.assertIn("onBeforeUnmount", panel)
 
 	def test_amended_registration_uses_canonical_agent_source(self):
 		identity = (ROOT / "ccd_portal" / "source_identity.py").read_text()

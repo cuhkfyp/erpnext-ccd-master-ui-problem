@@ -77,7 +77,7 @@ def _resolve_centre(key: str, profile: dict) -> str | None:
 	return next(iter(matches)) if len(matches) == 1 else None
 
 
-def _get_or_create_portal_record(doc) -> object:
+def _get_or_create_portal_record(doc, *, active: bool = True) -> object:
 	opaque_id = opaque_record_id(doc.ccd_reg_source, doc.ccd_source_key)
 	name = frappe.db.get_value("CCD Portal Record", {"portal_record_id": opaque_id}, "name")
 	# A CCD row whose governed source identity changes must not retain the old
@@ -96,7 +96,7 @@ def _get_or_create_portal_record(doc) -> object:
 		"source_registration": doc.ccd_reg_source,
 		"source_key_digest": opaque_record_id(doc.ccd_reg_source, doc.ccd_source_key)[5:],
 		"source_modified": doc.modified,
-		"active": 1,
+		"active": int(active),
 		"last_indexed_on": now_datetime(),
 	}
 	if name:
@@ -116,8 +116,46 @@ def _deactivate_portal_record(name: str) -> None:
 	frappe.db.set_value("CCD Portal Record Centre", {"portal_record": name}, "active", 0, update_modified=False)
 
 
-def index_record(ccd_master_name: str) -> dict:
-	meta = frappe.get_meta("CCD Master")
+def source_index_context(source: str, *, allow_sync_pending: bool = False) -> dict:
+	"""Load immutable-per-run source data once for a bounded refresh worker."""
+	source_id = canonical_source_id(source)
+	profile = _source_profile(source_id)
+	policy, field_policies = get_active_policy()
+	context = {
+		"source": source_id,
+		"meta": frappe.get_meta("CCD Master"),
+		"profile": profile,
+		"policy": policy,
+		"field_policies": field_policies,
+		"allow_sync_pending": bool(allow_sync_pending),
+		"centre_cache": {},
+	}
+	if profile and profile["assignment_mode"] == "Fixed Centres":
+		configured = sorted(set(profile["fixed_centres"]))
+		resolved = (
+			sorted(
+				frappe.get_all(
+					"CCD Portal Centre",
+					filters={"name": ["in", configured], "active": 1},
+					pluck="name",
+				)
+			)
+			if configured
+			else []
+		)
+		context["fixed_centres"] = resolved if resolved == configured else []
+	return context
+
+
+def index_record(
+	ccd_master_name: str,
+	*,
+	allow_sync_pending: bool = False,
+	publish: bool = True,
+	index_context: dict | None = None,
+) -> dict:
+	context = index_context or {}
+	meta = context.get("meta") or frappe.get_meta("CCD Master")
 	doc = frappe.get_doc("CCD Master", ccd_master_name)
 	if not doc.ccd_reg_source or not doc.ccd_source_key:
 		return {"status": "unmapped", "reason": "missing_source_identity"}
@@ -136,9 +174,12 @@ def index_record(ccd_master_name: str) -> dict:
 		if portal_name:
 			_deactivate_portal_record(portal_name)
 		return {"status": "unmapped", "reason": "duplicate_source_identity"}
-	policy, field_policies = get_active_policy()
+	policy = context.get("policy")
+	field_policies = context.get("field_policies")
+	if not policy or field_policies is None:
+		policy, field_policies = get_active_policy()
 
-	record = _get_or_create_portal_record(doc)
+	record = _get_or_create_portal_record(doc, active=publish)
 	frappe.db.set_value(
 		"CCD Portal Record", record.name, "policy_version", policy["policy_version"], update_modified=False
 	)
@@ -146,21 +187,29 @@ def index_record(ccd_master_name: str) -> dict:
 	frappe.db.delete("CCD Portal Search Token", {"portal_record": record.name})
 	frappe.db.delete("CCD Portal Record Centre", {"portal_record": record.name})
 
-	profile = _source_profile(doc.ccd_reg_source)
+	profile = context.get("profile") or _source_profile(doc.ccd_reg_source)
 	if not profile:
 		return {"status": "unmapped", "record": record.name, "reason": "source_profile"}
-	if profile.get("sync_pending"):
+	if profile.get("sync_pending") and not (
+		allow_sync_pending or context.get("allow_sync_pending")
+	):
 		return {"status": "unmapped", "record": record.name, "reason": "source_sync_pending"}
 
 	if profile["assignment_mode"] == "Fixed Centres":
 		configured = sorted(set(profile["fixed_centres"]))
-		centres = sorted(
-			frappe.get_all(
-				"CCD Portal Centre",
-				filters={"name": ["in", configured], "active": 1},
-				pluck="name",
+		centres = context.get("fixed_centres")
+		if centres is None:
+			centres = (
+				sorted(
+					frappe.get_all(
+						"CCD Portal Centre",
+						filters={"name": ["in", configured], "active": 1},
+						pluck="name",
+					)
+				)
+				if configured
+				else []
 			)
-		) if configured else []
 		if not centres or centres != configured:
 			return {"status": "unmapped", "record": record.name, "reason": "fixed_centres"}
 		provenance = f"Fixed centres from source profile {profile['name']}"
@@ -168,7 +217,14 @@ def index_record(ccd_master_name: str) -> dict:
 		if not meta.has_field("ccd_portal_centre_key"):
 			frappe.throw(_("CCD Master centre-key field is not installed."))
 		parsed = _parse_centre_keys(doc.get("ccd_portal_centre_key"), profile)
-		centres = sorted({centre for key in parsed if (centre := _resolve_centre(key, profile))})
+		centre_cache = context.get("centre_cache")
+		if centre_cache is None:
+			centres = sorted({centre for key in parsed if (centre := _resolve_centre(key, profile))})
+		else:
+			for key in parsed:
+				if key not in centre_cache:
+					centre_cache[key] = _resolve_centre(key, profile)
+			centres = sorted({centre_cache[key] for key in parsed if centre_cache.get(key)})
 		if not centres or len(centres) != len(set(parsed)):
 			return {"status": "unmapped", "record": record.name, "reason": "centre_alias"}
 		provenance = f"Centre key parsed by source profile {profile['name']}"
@@ -180,7 +236,7 @@ def index_record(ccd_master_name: str) -> dict:
 				"portal_record": record.name,
 				"centre": centre,
 				"provenance": provenance,
-				"active": 1,
+				"active": int(publish),
 			}
 		).insert(ignore_permissions=True)
 
@@ -198,7 +254,7 @@ def index_record(ccd_master_name: str) -> dict:
 				"fieldname": field_policy["fieldname"],
 				"token": search_token(field_policy["fieldname"], normalized),
 				"policy_version": policy["policy_version"],
-				"active": 1,
+				"active": int(publish),
 			}
 		).insert(ignore_permissions=True)
 		indexed += 1

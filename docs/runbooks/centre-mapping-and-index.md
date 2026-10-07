@@ -67,10 +67,11 @@ Changing a per-record mapping is intentionally two-stage:
 2. Run the registration's existing **full agent synchronization**. The agent
    reads the newly saved mapping and repopulates the hidden canonical key.
 3. Return to **Sources**, enter a new audit reason, and choose **Complete sync
-   and refresh**. The pending gate is removed only in the same transaction as a
-   successful strict index rebuild. Missing keys, unknown aliases, invalid
-   parsers, or incomplete coverage roll the operation back and keep access
-   disabled.
+   and refresh**. The request returns after queuing a manager-owned long job.
+   The job rebuilds inactive 250-record pages, reports aggregate progress, and
+   removes the pending gate only when one final audited publish succeeds.
+   Missing keys, unknown aliases, invalid parsers, source/policy changes, or
+   incomplete coverage keep access disabled.
 
 Use **Exact** when the synchronized value is already one complete centre code,
 such as `12345`. Exact requires neither Delimiter nor Pattern. Use **Delimited**
@@ -82,20 +83,25 @@ governed selections rather than free-text identifiers.
 
 ## Build and refresh
 
-Run a full refresh after the secret, active policy, profiles, centres, and aliases
-exist:
+Refresh each governed source after the secret, active policy, profiles, centres,
+and aliases exist. Use the Sources screen, or queue one source from a controlled
+Administrator bench context:
 
 ```bash
-bench --site <site> execute ccd_portal.admin.refresh_index \
-  --kwargs '{"reason":"Initial governed index build"}'
+bench --site <site> execute ccd_portal.source_refresh.start_source_refresh \
+  --kwargs '{"source":"<submitted-registration>","reason":"Initial governed index build"}'
 ```
 
 A System Manager who is also the portal Access Administrator enters the reason
-in the source form and chooses **Save and refresh index**. The save and
-source-specific rebuild run in one transaction; if any record is unmapped or
-fails, the change rolls back and the previous working assignment remains in
-place. **Refresh only** is available for rebuilding an unchanged source after a
-sync and does not process unrelated registrations.
+in the source form and chooses **Save and refresh index**. The configuration is
+saved with `sync_pending=1`, so the source immediately fails closed. The
+source-specific rebuild then runs on the long queue in bounded pages; staged
+records, tokens, and centre relations remain inactive until every record and
+the completion audit succeed. A failed job leaves the source disabled and can
+be retried after its reported blocker is corrected. **Refresh only** follows the
+same background path for an unchanged source and never processes unrelated
+registrations. Reloading the Sources screen resumes progress display for the
+requesting manager; no operation token is stored in browser storage.
 
 For an Access Administrator who is not also a System Manager, saving a source
 assignment immediately deactivates the existing centre relations and a System
@@ -115,8 +121,9 @@ the hourly reconciler is a fail-safe for recently modified rows and raw-SQL
 deletes. Do not enable staff until the private agent remediation wires and tests
 the completion call for full and delta sync.
 
-Changing an active search policy requires a full refresh. HMAC tokens are tagged
-with their policy version, so stale-version tokens do not match.
+Changing an active search policy requires queuing a refresh for every active
+source. HMAC tokens are tagged with their policy version, so stale-version
+tokens do not match.
 
 ## Coverage gate
 

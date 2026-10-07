@@ -146,6 +146,9 @@ def ensure_record_access(portal_record_id: str, context: PortalContext) -> dict:
 		SELECT r.name, r.portal_record_id, r.ccd_master_record, r.policy_version, r.source_modified,
 		       GROUP_CONCAT(DISTINCT rc.centre ORDER BY rc.centre) AS centres
 		  FROM `tabCCD Portal Record` r
+		  JOIN `tabCCD Portal Source Profile` sp
+		    ON sp.canonical_source_id = r.source_registration
+		   AND sp.active = 1 AND COALESCE(sp.sync_pending, 0) = 0
 		  JOIN `tabCCD Portal Record Centre` rc ON rc.portal_record = r.name
 		 WHERE r.portal_record_id = %(record_id)s AND r.active = 1 AND rc.active = 1
 		   AND (rc.effective_from IS NULL OR rc.effective_from <= %(today)s)

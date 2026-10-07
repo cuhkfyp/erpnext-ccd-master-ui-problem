@@ -188,10 +188,13 @@ def _accessible_records_for_person(
 	placeholders = ", ".join(["%s"] * len(record_names))
 	rows = frappe.db.sql(
 		f"""
-		SELECT portal_record_id
-		  FROM `tabCCD Portal Record`
-		 WHERE active = 1 AND policy_version = %s AND ccd_master_record IN ({placeholders})
-		 ORDER BY portal_record_id
+		SELECT r.portal_record_id
+		  FROM `tabCCD Portal Record` r
+		  JOIN `tabCCD Portal Source Profile` sp
+		    ON sp.canonical_source_id = r.source_registration
+		   AND sp.active = 1 AND COALESCE(sp.sync_pending, 0) = 0
+		 WHERE r.active = 1 AND r.policy_version = %s AND r.ccd_master_record IN ({placeholders})
+		 ORDER BY r.portal_record_id
 		""",
 		[policy_version, *record_names],
 		as_dict=True,
@@ -406,6 +409,9 @@ def _search(context: PortalContext, criteria, *, override_reason: str | None = N
 			SELECT r.portal_record_id
 			  FROM `tabCCD Portal Search Token` t
 			  JOIN `tabCCD Portal Record` r ON r.name = t.portal_record AND r.active = 1
+			  JOIN `tabCCD Portal Source Profile` sp
+			    ON sp.canonical_source_id = r.source_registration
+			   AND sp.active = 1 AND COALESCE(sp.sync_pending, 0) = 0
 			  JOIN `tabCCD Portal Record Centre` rc ON rc.portal_record = r.name AND rc.active = 1
 			 WHERE t.active = 1 AND ({conditions}) AND t.policy_version = %s
 			   AND (rc.effective_from IS NULL OR rc.effective_from <= %s)

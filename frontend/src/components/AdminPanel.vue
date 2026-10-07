@@ -14,6 +14,9 @@
     <div v-if="error" class="error" role="alert">{{ error }}</div>
     <div v-if="message" class="success" role="status">{{ message }}</div>
     <div v-if="warning" class="notice" role="status">{{ warning }}</div>
+    <div v-if="sourceRefresh && ['Queued','Running'].includes(sourceRefresh.status)" class="notice" role="status">
+      {{ __('Background index refresh') }}: {{ sourceRefresh.status }} · {{ sourceRefresh.processed_records || 0 }}/{{ sourceRefresh.total_records || 0 }} {{ __('records') }}
+    </div>
 
     <template v-if="config">
       <h3>{{ config.label }}</h3>
@@ -57,7 +60,7 @@
           <tbody>
             <tr v-for="row in rows" :key="row.name">
               <td v-for="field in config.columns" :key="field">{{ formatCell(row, field) }}</td>
-              <td><button class="secondary" @click="edit(row)">{{ __('Edit') }}</button> <button v-if="resource === 'source_profiles' && canActivatePolicy" class="secondary" :disabled="busy" @click="refreshSource(row)">{{ sourceActionLabel(row) }}</button></td>
+              <td><button class="secondary" :disabled="row.refresh_in_progress" @click="edit(row)">{{ __('Edit') }}</button> <button v-if="resource === 'source_profiles' && canActivatePolicy" class="secondary" :disabled="busy || (row.refresh_in_progress && !row.refresh_operation_token)" @click="refreshSource(row)">{{ sourceActionLabel(row) }}</button></td>
             </tr>
           </tbody>
         </table>
@@ -123,7 +126,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { call } from "../api";
 
 const __ = (text) => text;
@@ -136,12 +139,13 @@ const resources = [
 const configs = {
   centres: { label: __("Centres"), help: __("A centre is an access boundary. Its code becomes the exact value selected in grants."), columns: ["centre_code","centre_name","department","active"], fields: [{name:"centre_code",label:__("Code"),required:true,help:__("Stable governed code, for example 12345.")},{name:"centre_name",label:__("Name"),required:true},{name:"department",label:__("ERP Department"),reference:"departments",placeholder:__("No linked department")},{name:"active",label:__("Active"),type:"check"}] },
   aliases: { label: __("Centre aliases"), help: __("Use an alias only when a source centre value differs from the canonical centre code."), columns: ["alias_code","centre","source_profile","active"], fields: [{name:"alias_code",label:__("Source code"),required:true},{name:"centre",label:__("Canonical centre"),reference:"centres",required:true,placeholder:__("Select a centre")},{name:"source_profile",label:__("Source profile"),reference:"source_profiles",placeholder:__("All source profiles")},{name:"active",label:__("Active"),type:"check"}] },
-  source_profiles: { label: __("Source centre assignments"), help: __("Select the current submitted CCD Registration. The portal separately derives the stable CCD source used by the agent, so Frappe amendment suffixes do not break indexing. Choose Fixed Centres when every source record has the same access centres; choose Per-record Centre Key when centre membership varies."), columns: ["profile_code","source_registration","canonical_source_id","assignment_mode","authoritative_centre_column","mapping_status","fixed_centres_display","parser_type","active"], fields: [{name:"profile_code",label:__("Profile code"),required:true},{name:"source_registration",label:__("Current submitted CCD Registration"),reference:"registrations",required:true,placeholder:__("Select a submitted registration"),help:__("Use the active amendment, for example a registration ending in -34. Its stable CCD source is derived automatically.")},{name:"assignment_mode",label:__("Centre assignment"),options:["Fixed Centres","Per-record Centre Key"],required:true,help:__("Fixed Centres applies every selected centre to every record. Per-record mode reads a governed centre column for each record.")},{name:"authoritative_centre_column",label:__("Authoritative centre source column"),reference:"registration_columns",type:"datalist",required:true,showWhen:{assignment_mode:"Per-record Centre Key"},placeholder:__("Type the exact database column name"),help:__("Choose a known mapped column or type an exact source column. Only letters, numbers, and underscores are accepted; the agent validates it during the next full sync.")},{name:"fixed_centres",label:__("Fixed centre(s)"),reference:"centres",type:"multiselect",required:true,showWhen:{assignment_mode:"Fixed Centres"},help:__("Tick one for a single-centre source, or tick several only when every record is legitimately shared by all of them.")},{name:"parser_type",label:__("Per-record parser"),options:["Exact","Delimited","Regular Expression"],required:true,showWhen:{assignment_mode:"Per-record Centre Key"},help:__("Exact handles one key per record. Delimited handles a legitimately shared record containing multiple keys.")},{name:"delimiter",label:__("Delimiter"),showWhen:{assignment_mode:"Per-record Centre Key",parser_type:"Delimited"},placeholder:__("Comma by default"),help:__("Separates multiple centre codes stored in one record.")},{name:"parser_pattern",label:__("Bounded pattern"),showWhen:{assignment_mode:"Per-record Centre Key",parser_type:"Regular Expression"},required:true,placeholder:__("For example: ^[0-9]{5}$"),help:__("Required only for Regular Expression. Use Exact if no extraction is needed.")},{name:"active",label:__("Active"),type:"check"}] },
+  source_profiles: { label: __("Source centre assignments"), help: __("Select the current submitted CCD Registration. The portal separately derives the stable CCD source used by the agent, so Frappe amendment suffixes do not break indexing. Choose Fixed Centres when every source record has the same access centres; choose Per-record Centre Key when centre membership varies."), columns: ["profile_code","source_registration","canonical_source_id","assignment_mode","authoritative_centre_column","mapping_status","fixed_centres_display","parser_type","refresh_status","active"], fields: [{name:"profile_code",label:__("Profile code"),required:true},{name:"source_registration",label:__("Current submitted CCD Registration"),reference:"registrations",required:true,placeholder:__("Select a submitted registration"),help:__("Use the active amendment, for example a registration ending in -34. Its stable CCD source is derived automatically.")},{name:"assignment_mode",label:__("Centre assignment"),options:["Fixed Centres","Per-record Centre Key"],required:true,help:__("Fixed Centres applies every selected centre to every record. Per-record mode reads a governed centre column for each record.")},{name:"authoritative_centre_column",label:__("Authoritative centre source column"),reference:"registration_columns",type:"datalist",required:true,showWhen:{assignment_mode:"Per-record Centre Key"},placeholder:__("Type the exact database column name"),help:__("Choose a known mapped column or type an exact source column. Only letters, numbers, and underscores are accepted; the agent validates it during the next full sync.")},{name:"fixed_centres",label:__("Fixed centre(s)"),reference:"centres",type:"multiselect",required:true,showWhen:{assignment_mode:"Fixed Centres"},help:__("Tick one for a single-centre source, or tick several only when every record is legitimately shared by all of them.")},{name:"parser_type",label:__("Per-record parser"),options:["Exact","Delimited","Regular Expression"],required:true,showWhen:{assignment_mode:"Per-record Centre Key"},help:__("Exact handles one key per record. Delimited handles a legitimately shared record containing multiple keys.")},{name:"delimiter",label:__("Delimiter"),showWhen:{assignment_mode:"Per-record Centre Key",parser_type:"Delimited"},placeholder:__("Comma by default"),help:__("Separates multiple centre codes stored in one record.")},{name:"parser_pattern",label:__("Bounded pattern"),showWhen:{assignment_mode:"Per-record Centre Key",parser_type:"Regular Expression"},required:true,placeholder:__("For example: ^[0-9]{5}$"),help:__("Required only for Regular Expression. Use Exact if no extraction is needed.")},{name:"active",label:__("Active"),type:"check"}] },
   profiles: { label: __("User profiles"), columns: ["user","authority","active"], fields: [{name:"user",label:__("Frappe user"),reference:"users",required:true,placeholder:__("Select an enabled system user")},{name:"authority",label:__("Exactly one authority"),options:["Reader","Operator","Data Steward","Access Administrator"],required:true},{name:"active",label:__("Active"),type:"check"}] },
   grants: { label: __("Explicit centre grants"), help: __("A grant joins one active portal profile to one canonical centre. Registration names are not centres."), columns: ["user","centre","active","effective_from","effective_to"], fields: [{name:"user",label:__("Portal user"),reference:"profiles",required:true,placeholder:__("Select a portal profile")},{name:"centre",label:__("Centre"),reference:"centres",required:true,placeholder:__("Select a canonical centre")},{name:"active",label:__("Active"),type:"check"},{name:"effective_from",label:__("From"),type:"date",help:__("Optional; blank means immediately.")},{name:"effective_to",label:__("To"),type:"date",help:__("Optional; blank means no scheduled expiry.")}] },
   reveal_reasons: { label: __("Reveal reasons"), columns: ["reason_code","label","display_order","active"], fields: [{name:"reason_code",label:__("Code")},{name:"label",label:__("Label")},{name:"display_order",label:__("Order"),type:"number"},{name:"active",label:__("Active"),type:"check"}] },
 };
-const resource = ref("centres"), rows = ref([]), policies = ref([]), coverage = ref(null), rollout = ref(null), rolloutPilots = ref([]), rolloutReason = ref(""), busy = ref(false), error = ref(""), message = ref(""), warning = ref(""), editing = ref(""), activationReason = ref(""), refreshReason = ref(""), viewingPolicy = ref(null);
+const resource = ref("centres"), rows = ref([]), policies = ref([]), coverage = ref(null), rollout = ref(null), rolloutPilots = ref([]), rolloutReason = ref(""), busy = ref(false), error = ref(""), message = ref(""), warning = ref(""), editing = ref(""), activationReason = ref(""), refreshReason = ref(""), viewingPolicy = ref(null), sourceRefresh = ref(null);
+let sourceRefreshMonitor = 0;
 const references = ref({centres:[],source_profiles:[],profiles:[],registrations:[],registration_columns:[],users:[],departments:[]});
 const form = reactive({});
 const policy = reactive({ name: "", version: "", title: "", same_person_enabled: false, fields: "[]" });
@@ -159,11 +163,39 @@ function optionsFor(field) {
 
 function reset() { editing.value = ""; Object.keys(form).forEach((key) => delete form[key]); config.value?.fields.forEach((field) => form[field.name] = field.type === "check" ? true : field.type === "multiselect" ? [] : ""); if (resource.value === "source_profiles") { form.assignment_mode = "Per-record Centre Key"; form.parser_type = "Exact"; } }
 function edit(row) { editing.value = row.name; reset(); editing.value = row.name; config.value.fields.forEach((field) => form[field.name] = field.type === "check" ? Boolean(row[field.name]) : field.type === "multiselect" ? [...(row[field.name] || [])] : (row[field.name] ?? "")); window.scrollTo({top:0,behavior:"smooth"}); }
-function columnLabel(field) { if (field === "fixed_centres_display") return __("Fixed centre(s)"); if (field === "canonical_source_id") return __("Stable CCD source"); return config.value?.fields.find((item) => item.name === field)?.label || field.replaceAll("_", " "); }
-function formatCell(row, field) { if (resource.value === "source_profiles" && ((field === "parser_type" && row.assignment_mode === "Fixed Centres") || (field === "authoritative_centre_column" && row.assignment_mode === "Fixed Centres"))) return "—"; const value = row[field]; return Array.isArray(value) ? (value.join(", ") || "—") : (value ?? ""); }
-function sourceActionLabel(row) { return row.sync_pending ? __("Complete sync and refresh") : __("Refresh only"); }
+function columnLabel(field) { if (field === "fixed_centres_display") return __("Fixed centre(s)"); if (field === "canonical_source_id") return __("Stable CCD source"); if (field === "refresh_status") return __("Index refresh"); return config.value?.fields.find((item) => item.name === field)?.label || field.replaceAll("_", " "); }
+function formatCell(row, field) { if (resource.value === "source_profiles" && ((field === "parser_type" && row.assignment_mode === "Fixed Centres") || (field === "authoritative_centre_column" && row.assignment_mode === "Fixed Centres"))) return "—"; if (field === "refresh_status") { if (row.refresh_status) return `${row.refresh_status}${row.refresh_total ? ` ${row.refresh_processed || 0}/${row.refresh_total}` : ""}`; return row.sync_pending ? __("Pending") : __("Ready"); } const value = row[field]; return Array.isArray(value) ? (value.join(", ") || "—") : (value ?? ""); }
+function sourceActionLabel(row) { if (row.refresh_in_progress) return row.refresh_operation_token ? __("View refresh progress") : __("Refresh in progress"); if (!row.sync_pending) return __("Refresh only"); return row.assignment_mode === "Per-record Centre Key" ? __("Complete sync and refresh") : __("Retry refresh"); }
+function delay(milliseconds) { return new Promise((resolve) => window.setTimeout(resolve, milliseconds)); }
+function beginSourceRefresh(operation) { sourceRefresh.value = {...operation,processed_records:operation.processed_records || 0}; warning.value = `${__("Source saved and disabled while its index refresh runs in the background.")} ${__("You may leave this page and return to view progress.")}`; void monitorSourceRefresh(operation.operation_token); }
+async function monitorSourceRefresh(operationToken) {
+  const monitor = ++sourceRefreshMonitor;
+  while (monitor === sourceRefreshMonitor) {
+    await delay(2500);
+    try {
+      const state = await call("ccd_portal.source_refresh.get_source_refresh", {operation_token:operationToken}, false);
+      if (monitor !== sourceRefreshMonitor) return;
+      sourceRefresh.value = state;
+      if (["Queued","Running"].includes(state.status)) continue;
+      if (state.status === "Completed") {
+        warning.value = "";
+        const result = state.result || {};
+        message.value = `${__("Background index refresh completed")}: ${result.indexed || 0}/${result.total || 0} ${__("indexed")}.`;
+        await load();
+        return;
+      }
+      error.value = state.error || __("The background refresh has no confirmed result. The source remains disabled.");
+      warning.value = "";
+      await load();
+      return;
+    } catch (e) {
+      error.value = e.message;
+      return;
+    }
+  }
+}
 async function select(value) { resource.value = value; error.value = ""; message.value = ""; warning.value = ""; viewingPolicy.value = null; reset(); await load(); }
-async function load() { busy.value = true; try { if (config.value) rows.value = (await call("ccd_portal.admin.list_resources", {resource:resource.value}, false)).rows; else if (resource.value === "policies") policies.value = (await call("ccd_portal.admin.list_policies", {}, false)).policies; else if (resource.value === "rollout") { rollout.value=await call("ccd_portal.admin.get_same_person_rollout",{},false); rolloutPilots.value=[...rollout.value.pilot_users]; } else coverage.value = await call("ccd_portal.admin.get_coverage", {}, false); } catch (e) { error.value = e.message; } finally { busy.value = false; } }
+async function load() { busy.value = true; try { if (config.value) { rows.value = (await call("ccd_portal.admin.list_resources", {resource:resource.value}, false)).rows; const active = rows.value.find(row => row.refresh_in_progress && row.refresh_operation_token); if (active && sourceRefresh.value?.operation_token !== active.refresh_operation_token) void monitorSourceRefresh(active.refresh_operation_token); } else if (resource.value === "policies") policies.value = (await call("ccd_portal.admin.list_policies", {}, false)).policies; else if (resource.value === "rollout") { rollout.value=await call("ccd_portal.admin.get_same_person_rollout",{},false); rolloutPilots.value=[...rollout.value.pilot_users]; } else coverage.value = await call("ccd_portal.admin.get_coverage", {}, false); } catch (e) { error.value = e.message; } finally { busy.value = false; } }
 async function loadReferences() { references.value = await call("ccd_portal.admin.reference_options", {}, false); }
 async function saveResource() {
   busy.value = true; error.value = ""; message.value = ""; warning.value = "";
@@ -189,7 +221,7 @@ async function saveResource() {
       if (String(refreshReason.value || "").trim().length < 3) throw new Error(__("Enter a reason before changing the source."));
       const result = await call("ccd_portal.admin.configure_source", {values,name:editing.value || null,authoritative_centre_column:authoritativeCentreColumn,reason:refreshReason.value});
       if (result.sync_required) warning.value = `${__("Mapping saved and audited. Portal access for this source is disabled. Run the registration's existing full agent synchronization, then enter a new reason and click Complete sync and refresh.")} ${__("Centre keys")}: ${result.keyed_records}/${result.total_records}.`;
-      else message.value = `${__("Source assignment saved, audited, and refreshed")}: ${result.refresh.indexed}/${result.refresh.total} ${__("indexed")}.`;
+      else beginSourceRefresh(result.refresh_operation);
       refreshReason.value = "";
     } else {
       if (resource.value === "source_profiles" && values.assignment_mode === "Per-record Centre Key") throw new Error(__("A System Manager who is also the portal Access Administrator must save a submitted-registration centre mapping."));
@@ -199,7 +231,7 @@ async function saveResource() {
     reset(); await Promise.all([load(),loadReferences()]);
   } catch(e) { error.value=e.message; } finally { busy.value=false; }
 }
-async function refreshSource(row) { busy.value=true; error.value=""; message.value=""; warning.value=""; try { if (String(refreshReason.value || "").trim().length < 3) throw new Error(__("Enter a System Manager reason before refreshing the source index.")); const result=row.sync_pending ? await call("ccd_portal.admin.complete_source_sync",{reason:refreshReason.value,source:row.source_registration}) : await call("ccd_portal.admin.refresh_index",{reason:refreshReason.value,source:row.source_registration}); const refresh=result.refresh || result; refreshReason.value=""; message.value=`${row.sync_pending ? __("Source sync completed and index opened") : __("Index refreshed")}: ${refresh.indexed}/${refresh.total} ${__("indexed")}, ${refresh.unmapped} ${__("unmapped")}, ${refresh.failed} ${__("failed")}.`; await load(); } catch(e) { error.value=e.message; } finally { busy.value=false; } }
+async function refreshSource(row) { busy.value=true; error.value=""; message.value=""; warning.value=""; try { if (row.refresh_in_progress && row.refresh_operation_token) { beginSourceRefresh({operation_token:row.refresh_operation_token,status:row.refresh_status,processed_records:row.refresh_processed,total_records:row.refresh_total}); return; } if (String(refreshReason.value || "").trim().length < 3) throw new Error(__("Enter a System Manager reason before refreshing the source index.")); const response=row.sync_pending && row.assignment_mode === "Per-record Centre Key" ? await call("ccd_portal.admin.complete_source_sync",{reason:refreshReason.value,source:row.source_registration}) : await call("ccd_portal.source_refresh.start_source_refresh",{reason:refreshReason.value,source:row.source_registration}); const operation=response.refresh_operation || response; refreshReason.value=""; beginSourceRefresh(operation); await load(); } catch(e) { error.value=e.message; } finally { busy.value=false; } }
 function resetPolicy() { policy.name=""; policy.version=""; policy.title=""; policy.same_person_enabled=false; policy.fields="[]"; }
 function yesNo(value) { return value ? __("Yes") : __("No"); }
 function viewPolicy(row) { viewingPolicy.value=row; requestAnimationFrame(()=>document.querySelector(".policy-detail")?.scrollIntoView({behavior:"smooth",block:"start"})); }
@@ -210,4 +242,5 @@ async function savePilots() { busy.value=true; error.value=""; try { await call(
 async function setGlobalRollout(enabled) { busy.value=true; error.value=""; try { await call("ccd_portal.admin.set_same_person_global",{enabled:enabled?1:0,reason:rolloutReason.value}); rolloutReason.value=""; message.value=enabled?__("Same-person search enabled globally and audited."):__("Same-person search disabled globally and audited."); await load(); } catch(e) { error.value=e.message; } finally { busy.value=false; } }
 async function activatePolicy(row) { busy.value=true; error.value=""; try { await call("ccd_portal.admin.activate_policy",{policy_name:row.name,reason:activationReason.value}); activationReason.value=""; message.value=__("Policy activated and audited. Complete a full index refresh before enabling users."); await load(); } catch(e) { error.value=e.message; } finally { busy.value=false; } }
 onMounted(async () => { reset(); busy.value=true; try { await Promise.all([loadReferences(),load()]); } catch(e) { error.value=e.message; } finally { busy.value=false; } });
+onBeforeUnmount(() => { sourceRefreshMonitor += 1; });
 </script>
