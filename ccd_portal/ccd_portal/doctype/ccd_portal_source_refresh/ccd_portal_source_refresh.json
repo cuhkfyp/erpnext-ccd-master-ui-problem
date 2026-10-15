@@ -1,0 +1,33 @@
+{
+ "doctype":"DocType","name":"CCD Portal Source Refresh","module":"CCD Portal","autoname":"field:operation_token","allow_rename":0,
+ "field_order":["operation_token","source_profile","source_registration","requested_by","status","stage","segment_state","processed_records","total_records","last_record_name","segment_number","attempt","current_job_id","profile_modified","source_latest_modified","governance_snapshot_json","policy_version","completion_event","queued_at","started_at","last_heartbeat","completed_at","blocked_reason","error","result_json"],
+ "fields":[
+  {"fieldname":"operation_token","fieldtype":"Data","label":"Operation Token","reqd":1,"unique":1,"read_only":1,"in_list_view":1},
+  {"fieldname":"source_profile","fieldtype":"Link","label":"Source Profile","options":"CCD Portal Source Profile","reqd":1,"read_only":1,"in_list_view":1},
+  {"fieldname":"source_registration","fieldtype":"Data","label":"Stable Source","reqd":1,"read_only":1,"in_list_view":1},
+  {"fieldname":"requested_by","fieldtype":"Link","label":"Requested By","options":"User","reqd":1,"read_only":1},
+  {"fieldname":"status","fieldtype":"Select","label":"Status","options":"Queued\nRunning\nCompleted\nFailed","default":"Queued","reqd":1,"read_only":1,"in_list_view":1},
+  {"fieldname":"stage","fieldtype":"Select","label":"Stage","options":"queued\nstaging\nindexing\npublishing\ncompleted\nfailed","default":"queued","reqd":1,"read_only":1},
+  {"fieldname":"segment_state","fieldtype":"Select","label":"Segment State","options":"Queued\nRunning\nComplete","default":"Queued","reqd":1,"read_only":1},
+  {"fieldname":"processed_records","fieldtype":"Int","label":"Processed Records","default":"0","read_only":1,"in_list_view":1},
+  {"fieldname":"total_records","fieldtype":"Int","label":"Total Records","default":"0","read_only":1,"in_list_view":1},
+  {"fieldname":"last_record_name","fieldtype":"Data","label":"Last Record Cursor","hidden":1,"read_only":1},
+  {"fieldname":"segment_number","fieldtype":"Int","label":"Next Segment","default":"0","hidden":1,"read_only":1},
+  {"fieldname":"attempt","fieldtype":"Int","label":"Segment Attempt","default":"0","hidden":1,"read_only":1},
+  {"fieldname":"current_job_id","fieldtype":"Data","label":"Current Job","hidden":1,"read_only":1},
+  {"fieldname":"profile_modified","fieldtype":"Data","label":"Profile Revision","hidden":1,"read_only":1},
+  {"fieldname":"source_latest_modified","fieldtype":"Data","label":"Source Revision","hidden":1,"read_only":1},
+  {"fieldname":"governance_snapshot_json","fieldtype":"Long Text","label":"Governance Snapshot","hidden":1,"read_only":1},
+  {"fieldname":"policy_version","fieldtype":"Data","label":"Policy Version","read_only":1},
+  {"fieldname":"completion_event","fieldtype":"Data","label":"Completion Event","hidden":1,"read_only":1},
+  {"fieldname":"queued_at","fieldtype":"Datetime","label":"Queued At","read_only":1},
+  {"fieldname":"started_at","fieldtype":"Datetime","label":"Started At","read_only":1},
+  {"fieldname":"last_heartbeat","fieldtype":"Datetime","label":"Last Checkpoint","read_only":1},
+  {"fieldname":"completed_at","fieldtype":"Datetime","label":"Completed At","read_only":1},
+  {"fieldname":"blocked_reason","fieldtype":"Data","label":"Blocked Reason","hidden":1,"read_only":1},
+  {"fieldname":"error","fieldtype":"Small Text","label":"Error","read_only":1},
+  {"fieldname":"result_json","fieldtype":"Long Text","label":"Result","hidden":1,"read_only":1}
+ ],
+ "permissions":[{"role":"System Manager","read":1}],
+ "sort_field":"creation","sort_order":"DESC","track_changes":0,"index_web_pages_for_search":0
+}

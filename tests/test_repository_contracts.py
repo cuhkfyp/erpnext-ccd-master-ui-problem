@@ -166,15 +166,32 @@ class RepositoryContractTests(unittest.TestCase):
 		self.assertIn("Complete sync and refresh", panel)
 		self.assertIn('"reason": "fixed_centres"', indexing)
 
-	def test_large_source_refresh_is_background_paged_and_fail_closed(self):
+	def test_large_source_refresh_is_checkpointed_resumable_and_fail_closed(self):
 		refresh = (ROOT / "ccd_portal" / "source_refresh.py").read_text()
 		security = (ROOT / "ccd_portal" / "security.py").read_text()
 		api = (ROOT / "ccd_portal" / "api.py").read_text()
+		hooks = (ROOT / "ccd_portal" / "hooks.py").read_text()
+		indexing = (ROOT / "ccd_portal" / "indexing.py").read_text()
 		panel = (ROOT / "frontend" / "src" / "components" / "AdminPanel.vue").read_text()
+		operation = json.loads(
+			(
+				ROOT
+				/ "ccd_portal"
+				/ "ccd_portal"
+				/ "doctype"
+				/ "ccd_portal_source_refresh"
+				/ "ccd_portal_source_refresh.json"
+			).read_text()
+		)
 		for token in (
 			'queue="long"',
-			"enqueue_after_commit=True",
-			"PAGE_SIZE = 250",
+			"SEGMENT_SIZE = 1000",
+			"SEGMENT_TIMEOUT_SECONDS = 30 * 60",
+			"MAX_SEGMENT_ATTEMPTS = 3",
+			"run_source_refresh_segment",
+			'"last_record_name": names[-1]',
+			'"segment_state": "Queued"',
+			"recover_source_refreshes",
 			"publish=False",
 			"frappe.db.commit()",
 			'"status": "Completed"',
@@ -183,6 +200,15 @@ class RepositoryContractTests(unittest.TestCase):
 			"policy_changed_during_refresh",
 		):
 			self.assertIn(token, refresh)
+		self.assertNotIn("JOB_TIMEOUT_SECONDS = 6 * 60 * 60", refresh)
+		self.assertEqual(operation["name"], "CCD Portal Source Refresh")
+		fields = {field["fieldname"] for field in operation["fields"]}
+		self.assertTrue(
+			{"last_record_name", "segment_number", "attempt", "current_job_id", "last_heartbeat"}.issubset(fields)
+		)
+		self.assertIn("ccd_portal.source_refresh.recover_source_refreshes", hooks)
+		self.assertIn('frappe.db.delete("CCD Portal Search Token"', indexing)
+		self.assertIn('frappe.db.delete("CCD Portal Record Centre"', indexing)
 		self.assertIn("COALESCE(sp.sync_pending, 0) = 0", security)
 		self.assertIn("COALESCE(sp.sync_pending, 0) = 0", api)
 		self.assertIn("Background index refresh", panel)

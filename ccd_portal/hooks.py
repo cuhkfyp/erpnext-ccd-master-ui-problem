@@ -38,6 +38,7 @@ doc_events = {
 }
 
 scheduler_events = {
+	"cron": {"*/5 * * * *": ["ccd_portal.source_refresh.recover_source_refreshes"]},
 	"hourly": ["ccd_portal.sync.reconcile_recent_records"],
 	"daily": ["ccd_portal.sync.generate_coverage_snapshot"],
 }

@@ -68,8 +68,10 @@ Changing a per-record mapping is intentionally two-stage:
    reads the newly saved mapping and repopulates the hidden canonical key.
 3. Return to **Sources**, enter a new audit reason, and choose **Complete sync
    and refresh**. The request returns after queuing a manager-owned long job.
-   The job rebuilds inactive 250-record pages, reports aggregate progress, and
-   removes the pending gate only when one final audited publish succeeds.
+   The operation rebuilds inactive 1,000-record segments, durably checkpoints
+   its record cursor, reports aggregate progress, and removes the pending gate
+   only when one final audited publish succeeds. Each segment has its own
+   bounded worker timeout; the overall operation has no six-hour limit.
    Missing keys, unknown aliases, invalid parsers, source/policy changes, or
    incomplete coverage keep access disabled.
 
@@ -95,10 +97,13 @@ bench --site <site> execute ccd_portal.source_refresh.start_source_refresh \
 A System Manager who is also the portal Access Administrator enters the reason
 in the source form and chooses **Save and refresh index**. The configuration is
 saved with `sync_pending=1`, so the source immediately fails closed. The
-source-specific rebuild then runs on the long queue in bounded pages; staged
+source-specific rebuild then runs on the long queue in bounded segments; staged
 records, tokens, and centre relations remain inactive until every record and
-the completion audit succeed. A failed job leaves the source disabled and can
-be retried after its reported blocker is corrected. **Refresh only** follows the
+the completion audit succeed. A worker or container interruption resumes from
+the last committed cursor and may safely replay at most one segment. Segment
+writes and the cursor advance share one transaction, so replay cannot duplicate
+records, tokens, or centre relations. Three consecutive failures of the same
+segment leave the source disabled for investigation. **Refresh only** follows the
 same background path for an unchanged source and never processes unrelated
 registrations. Reloading the Sources screen resumes progress display for the
 requesting manager; no operation token is stored in browser storage.
