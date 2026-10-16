@@ -212,6 +212,9 @@ class RepositoryContractTests(unittest.TestCase):
 		self.assertIn("COALESCE(sp.sync_pending, 0) = 0", security)
 		self.assertIn("COALESCE(sp.sync_pending, 0) = 0", api)
 		self.assertIn("Background index refresh", panel)
+		self.assertIn("function updateSourceRefreshRow(operationToken, state)", panel)
+		self.assertIn("updateSourceRefreshRow(operationToken, state);", panel)
+		self.assertIn("refresh_processed: Number(state.processed_records", panel)
 		self.assertIn("onBeforeUnmount", panel)
 
 	def test_amended_registration_uses_canonical_agent_source(self):

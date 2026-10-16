@@ -167,7 +167,18 @@ function columnLabel(field) { if (field === "fixed_centres_display") return __("
 function formatCell(row, field) { if (resource.value === "source_profiles" && ((field === "parser_type" && row.assignment_mode === "Fixed Centres") || (field === "authoritative_centre_column" && row.assignment_mode === "Fixed Centres"))) return "—"; if (field === "refresh_status") { if (row.refresh_status) return `${row.refresh_status}${row.refresh_total ? ` ${row.refresh_processed || 0}/${row.refresh_total}` : ""}`; return row.sync_pending ? __("Pending") : __("Ready"); } const value = row[field]; return Array.isArray(value) ? (value.join(", ") || "—") : (value ?? ""); }
 function sourceActionLabel(row) { if (row.refresh_in_progress) return row.refresh_operation_token ? __("View refresh progress") : __("Refresh in progress"); if (!row.sync_pending) return __("Refresh only"); return row.assignment_mode === "Per-record Centre Key" ? __("Complete sync and refresh") : __("Retry refresh"); }
 function delay(milliseconds) { return new Promise((resolve) => window.setTimeout(resolve, milliseconds)); }
-function beginSourceRefresh(operation) { sourceRefresh.value = {...operation,processed_records:operation.processed_records || 0}; warning.value = `${__("Source saved and disabled while its index refresh runs in the background.")} ${__("You may leave this page and return to view progress.")}`; void monitorSourceRefresh(operation.operation_token); }
+function updateSourceRefreshRow(operationToken, state) {
+  const row = rows.value.find((item) => item.refresh_operation_token === operationToken);
+  if (!row) return;
+  Object.assign(row, {
+    refresh_status: state.status,
+    refresh_stage: state.stage || "",
+    refresh_processed: Number(state.processed_records ?? row.refresh_processed ?? 0),
+    refresh_total: Number(state.total_records ?? row.refresh_total ?? 0),
+    refresh_in_progress: ["Queued","Running"].includes(state.status),
+  });
+}
+function beginSourceRefresh(operation) { sourceRefresh.value = {...operation,processed_records:operation.processed_records || 0}; updateSourceRefreshRow(operation.operation_token, sourceRefresh.value); warning.value = `${__("Source saved and disabled while its index refresh runs in the background.")} ${__("You may leave this page and return to view progress.")}`; void monitorSourceRefresh(operation.operation_token); }
 async function monitorSourceRefresh(operationToken) {
   const monitor = ++sourceRefreshMonitor;
   while (monitor === sourceRefreshMonitor) {
@@ -176,6 +187,7 @@ async function monitorSourceRefresh(operationToken) {
       const state = await call("ccd_portal.source_refresh.get_source_refresh", {operation_token:operationToken}, false);
       if (monitor !== sourceRefreshMonitor) return;
       sourceRefresh.value = state;
+      updateSourceRefreshRow(operationToken, state);
       if (["Queued","Running"].includes(state.status)) continue;
       if (state.status === "Completed") {
         warning.value = "";
