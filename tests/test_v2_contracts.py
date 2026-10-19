@@ -1,3 +1,4 @@
+import ast
 import json
 from pathlib import Path
 import unittest
@@ -70,6 +71,28 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		self.assertIn('group.pop("_person", None)', api)
 		self.assertNotIn('"ccd_source_key"', api)
 		self.assertNotIn('"identity_group"', api)
+
+	def test_successful_identity_resolution_does_not_disable_expansion(self):
+		tree = ast.parse((ROOT / "ccd_portal" / "api.py").read_text())
+		grouped = next(
+			node
+			for node in tree.body
+			if isinstance(node, ast.FunctionDef) and node.name == "_grouped_response"
+		)
+		disable_assignments = [
+			node
+			for node in ast.walk(grouped)
+			if isinstance(node, ast.Assign)
+			and any(isinstance(target, ast.Name) and target.id == "expand" for target in node.targets)
+			and isinstance(node.value, ast.Constant)
+			and node.value.value is False
+		]
+		self.assertEqual(len(disable_assignments), 1)
+		identity_try = next(node for node in ast.walk(grouped) if isinstance(node, ast.Try))
+		self.assertTrue(
+			any(disable_assignments[0] in list(ast.walk(handler)) for handler in identity_try.handlers),
+			"same-person expansion must only be disabled when identity resolution fails",
+		)
 
 	def test_concern_queue_encrypts_context_and_limits_reporter_visibility(self):
 		api = (ROOT / "ccd_portal" / "api.py").read_text()

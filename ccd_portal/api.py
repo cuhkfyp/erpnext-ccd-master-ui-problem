@@ -246,7 +246,7 @@ def _grouped_response(
 		except Exception:
 			# Identity integration is additive. Its outage never removes a direct match.
 			person_by_record = {}
-		expand = False
+			expand = False
 
 	groups: list[dict] = []
 	group_map: dict[str, dict] = {}
