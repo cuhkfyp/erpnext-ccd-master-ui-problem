@@ -27,6 +27,15 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		self.assertEqual(fields["same_person_pilot_users"]["options"], "CCD Portal Same Person Pilot User")
 		self.assertNotEqual(fields["same_person_pilot_users"]["options"], fields["preview_users"]["options"])
 
+	def test_settings_upgrade_backfills_new_required_limits(self):
+		install = (ROOT / "ccd_portal" / "install.py").read_text()
+		admin = (ROOT / "ccd_portal" / "admin.py").read_text()
+		patches = (ROOT / "ccd_portal" / "patches.txt").read_text()
+		self.assertIn("def ensure_settings_defaults()", install)
+		self.assertIn('"concerns_per_hour": 10', install)
+		self.assertIn("ensure_settings_defaults()", admin)
+		self.assertIn("backfill_settings_defaults", patches)
+
 	def test_v2_policy_virtual_field_is_fixed_and_not_correctable(self):
 		policy = json.loads((DOCTYPE_ROOT / "ccd_portal_policy" / "ccd_portal_policy.json").read_text())
 		fields = json.loads(

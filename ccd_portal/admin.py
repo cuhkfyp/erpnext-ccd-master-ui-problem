@@ -7,6 +7,7 @@ from frappe.utils import cint, now_datetime
 from ccd_portal.audit import audit_denial, write_event
 from ccd_portal.identity import identity_coverage, schema_status
 from ccd_portal.indexing import coverage_report, refresh_source
+from ccd_portal.install import ensure_settings_defaults
 from ccd_portal.policy import get_active_policy
 from ccd_portal.primitives import is_valid_source_column
 from ccd_portal.security import (
@@ -800,6 +801,7 @@ def get_same_person_rollout():
 def set_same_person_pilots(users=None):
 	require_post()
 	context = _administrator_context("Same Person Pilot Change")
+	ensure_settings_defaults()
 	users = frappe.parse_json(users) if isinstance(users, str) else users
 	if not isinstance(users, list) or len(users) > 200:
 		frappe.throw(_("Select a valid pilot-user list."), frappe.ValidationError)

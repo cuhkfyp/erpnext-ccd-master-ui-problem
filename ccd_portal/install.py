@@ -2,6 +2,14 @@ import frappe
 from frappe.installer import update_site_config
 
 
+REQUIRED_SETTING_DEFAULTS = {
+	"searches_per_hour": 60,
+	"reveals_per_hour": 20,
+	"concerns_per_hour": 10,
+	"reveal_ttl_seconds": 120,
+}
+
+
 def after_install() -> None:
 	ensure_external_schema()
 	settings = frappe.get_single("CCD Portal Settings")
@@ -20,6 +28,18 @@ def after_install() -> None:
 
 def after_migrate() -> None:
 	ensure_external_schema()
+	ensure_settings_defaults()
+
+
+def ensure_settings_defaults() -> dict:
+	"""Backfill newly required singleton values without replacing configured limits."""
+	updated = []
+	for fieldname, default in REQUIRED_SETTING_DEFAULTS.items():
+		value = frappe.db.get_single_value("CCD Portal Settings", fieldname)
+		if value is None or value == "":
+			frappe.db.set_single_value("CCD Portal Settings", fieldname, default)
+			updated.append(fieldname)
+	return {"updated": updated}
 
 
 def ensure_external_schema() -> None:
