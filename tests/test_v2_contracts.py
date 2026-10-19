@@ -33,6 +33,7 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		patches = (ROOT / "ccd_portal" / "patches.txt").read_text()
 		self.assertIn("def ensure_settings_defaults()", install)
 		self.assertIn('"concerns_per_hour": 10', install)
+		self.assertIn("if cint(value) <= 0:", install)
 		self.assertIn("ensure_settings_defaults()", admin)
 		self.assertIn("backfill_settings_defaults", patches)
 

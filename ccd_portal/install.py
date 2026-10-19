@@ -1,5 +1,6 @@
 import frappe
 from frappe.installer import update_site_config
+from frappe.utils import cint
 
 
 REQUIRED_SETTING_DEFAULTS = {
@@ -36,7 +37,7 @@ def ensure_settings_defaults() -> dict:
 	updated = []
 	for fieldname, default in REQUIRED_SETTING_DEFAULTS.items():
 		value = frappe.db.get_single_value("CCD Portal Settings", fieldname)
-		if value is None or value == "":
+		if cint(value) <= 0:
 			frappe.db.set_single_value("CCD Portal Settings", fieldname, default)
 			updated.append(fieldname)
 	return {"updated": updated}
