@@ -13,9 +13,12 @@
 - Keep db_connector optional for direct masked search and add fail-closed schema,
   index, deployment, recovery, and two-centre UAT checks for V2 activation.
 - Replace synchronous full-source indexing with a portal-owned, manager-scoped
-  long-queue operation. It indexes 250-record pages while the source remains
+  long-queue operation. It indexes 1,000-record pages while the source remains
   disabled, exposes bounded progress, and publishes the complete index only
   after source, policy, profile, and audit checks succeed.
+- Add the missing record-leading search-token index so each source-refresh
+  replacement targets one portal record instead of scanning the entire token
+  table. The migration is idempotent for both upgrades and fresh installs.
 
 ## Unreleased - 2026-09-29
 

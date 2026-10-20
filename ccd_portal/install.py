@@ -57,11 +57,15 @@ def ensure_external_schema() -> None:
 	from ccd_portal.patches.v1_0.add_database_indexes import execute as add_database_indexes
 	from ccd_portal.patches.v1_0.create_ccd_master_centre_field import execute as create_centre_field
 	from ccd_portal.patches.v2_0.add_same_person_indexes import execute as add_same_person_indexes
+	from ccd_portal.patches.v2_0.add_search_token_record_index import (
+		execute as add_search_token_record_index,
+	)
 	from ccd_portal.patches.v2_0.add_source_refresh_indexes import execute as add_source_refresh_indexes
 
 	create_centre_field()
 	add_database_indexes()
 	add_same_person_indexes()
+	add_search_token_record_index()
 	add_source_refresh_indexes()
 
 

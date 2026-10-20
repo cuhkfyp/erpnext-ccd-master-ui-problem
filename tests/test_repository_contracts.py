@@ -168,6 +168,11 @@ class RepositoryContractTests(unittest.TestCase):
 
 	def test_large_source_refresh_is_checkpointed_resumable_and_fail_closed(self):
 		refresh = (ROOT / "ccd_portal" / "source_refresh.py").read_text()
+		install = (ROOT / "ccd_portal" / "install.py").read_text()
+		patches = (ROOT / "ccd_portal" / "patches.txt").read_text()
+		token_index = (
+			ROOT / "ccd_portal" / "patches" / "v2_0" / "add_search_token_record_index.py"
+		).read_text()
 		security = (ROOT / "ccd_portal" / "security.py").read_text()
 		api = (ROOT / "ccd_portal" / "api.py").read_text()
 		hooks = (ROOT / "ccd_portal" / "hooks.py").read_text()
@@ -209,6 +214,10 @@ class RepositoryContractTests(unittest.TestCase):
 		self.assertIn("ccd_portal.source_refresh.recover_source_refreshes", hooks)
 		self.assertIn('frappe.db.delete("CCD Portal Search Token"', indexing)
 		self.assertIn('frappe.db.delete("CCD Portal Record Centre"', indexing)
+		self.assertIn('INDEX_NAME = "ccd_portal_token_record"', token_index)
+		self.assertIn('["portal_record"]', token_index)
+		self.assertIn("add_search_token_record_index()", install)
+		self.assertIn("ccd_portal.patches.v2_0.add_search_token_record_index", patches)
 		self.assertIn("COALESCE(sp.sync_pending, 0) = 0", security)
 		self.assertIn("COALESCE(sp.sync_pending, 0) = 0", api)
 		self.assertIn("Background index refresh", panel)
