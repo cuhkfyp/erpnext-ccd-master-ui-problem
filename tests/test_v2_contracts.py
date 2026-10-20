@@ -27,6 +27,8 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		self.assertEqual(fields["same_person_enabled"]["default"], "0")
 		self.assertEqual(fields["same_person_pilot_users"]["options"], "CCD Portal Same Person Pilot User")
 		self.assertNotEqual(fields["same_person_pilot_users"]["options"], fields["preview_users"]["options"])
+		self.assertEqual(fields["service_name_fallback"]["default"], "Service not specified")
+		self.assertIn("CCD database/source name", fields["service_name_fallback"]["options"])
 
 	def test_settings_upgrade_backfills_new_required_limits(self):
 		install = (ROOT / "ccd_portal" / "install.py").read_text()
@@ -71,6 +73,22 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		self.assertIn('group.pop("_person", None)', api)
 		self.assertNotIn('"ccd_source_key"', api)
 		self.assertNotIn('"identity_group"', api)
+		self.assertIn('"service_name"', api)
+
+	def test_service_fallback_is_reasoned_audited_and_only_returns_a_display_label(self):
+		admin = (ROOT / "ccd_portal" / "admin.py").read_text()
+		security = (ROOT / "ccd_portal" / "security.py").read_text()
+		panel = (ROOT / "frontend" / "src" / "components" / "AdminPanel.vue").read_text()
+		app = (ROOT / "frontend" / "src" / "App.vue").read_text()
+		self.assertIn("def set_service_name_fallback(fallback: str, reason: str)", admin)
+		self.assertIn('require_system_manager(reason)', admin)
+		self.assertIn('"Service Name Fallback Change"', admin)
+		self.assertIn("record_service_name", security)
+		self.assertIn("registration_service_name", security)
+		self.assertIn("fallback_service_source", security)
+		self.assertIn("saveServiceFallback", panel)
+		self.assertIn("record.service_name", app)
+		self.assertNotIn("record.fallback_service_source", app)
 
 	def test_successful_identity_resolution_does_not_disable_expansion(self):
 		tree = ast.parse((ROOT / "ccd_portal" / "api.py").read_text())

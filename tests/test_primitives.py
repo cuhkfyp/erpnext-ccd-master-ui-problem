@@ -1,7 +1,16 @@
 import json
 import unittest
 
-from ccd_portal.primitives import canonical_json, is_valid_hkid, is_valid_source_column, mask_value, normalize_value
+from ccd_portal.primitives import (
+	SERVICE_FALLBACK_SOURCE,
+	SERVICE_FALLBACK_UNSPECIFIED,
+	canonical_json,
+	is_valid_hkid,
+	is_valid_source_column,
+	mask_value,
+	normalize_value,
+	resolve_service_name,
+)
 
 
 class PrimitiveTests(unittest.TestCase):
@@ -44,6 +53,28 @@ class PrimitiveTests(unittest.TestCase):
 		for invalid in ("", "1centre", "centre code", "dbo.centre", "centre;drop", "a" * 141):
 			with self.subTest(value=invalid):
 				self.assertFalse(is_valid_source_column(invalid))
+
+	def test_service_name_resolution_is_ordered_and_fails_safe(self):
+		self.assertEqual(
+			resolve_service_name("Record service", "Registration service", "SOURCE-A", SERVICE_FALLBACK_SOURCE),
+			"Record service",
+		)
+		self.assertEqual(
+			resolve_service_name("", "Registration service", "SOURCE-A", SERVICE_FALLBACK_SOURCE),
+			"Registration service",
+		)
+		self.assertEqual(
+			resolve_service_name("", "", "SOURCE-A", SERVICE_FALLBACK_SOURCE),
+			"SOURCE-A",
+		)
+		self.assertEqual(
+			resolve_service_name("", "", "SOURCE-A", SERVICE_FALLBACK_UNSPECIFIED),
+			SERVICE_FALLBACK_UNSPECIFIED,
+		)
+		self.assertEqual(
+			resolve_service_name("", "", "SOURCE-A", "unexpected"),
+			SERVICE_FALLBACK_UNSPECIFIED,
+		)
 
 	def test_fixture_contains_only_synthetic_namespace(self):
 		with open("tests/fixtures/synthetic_records.json", encoding="utf-8") as fixture:

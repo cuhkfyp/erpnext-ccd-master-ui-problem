@@ -18,7 +18,11 @@ from ccd_portal.identity import (
 )
 from ccd_portal.identity_rules import bounded_record_order
 from ccd_portal.policy import get_active_policy, policy_field_map, public_policy, reveal_allowed
-from ccd_portal.primitives import is_valid_unified_person_number
+from ccd_portal.primitives import (
+	SERVICE_FALLBACK_UNSPECIFIED,
+	is_valid_unified_person_number,
+	resolve_service_name,
+)
 from ccd_portal.security import (
 	CLIENT_AUTHORITIES,
 	REVEAL_AUTHORITIES,
@@ -130,7 +134,11 @@ def _record_document(access: dict, field_policies: list[dict]):
 	return values
 
 
-def _masked_record(access: dict, field_policies: list[dict]) -> dict:
+def _masked_record(
+	access: dict,
+	field_policies: list[dict],
+	service_name_fallback: str = SERVICE_FALLBACK_UNSPECIFIED,
+) -> dict:
 	values = _record_document(access, field_policies)
 	fields = []
 	for row in field_policies:
@@ -151,6 +159,12 @@ def _masked_record(access: dict, field_policies: list[dict]) -> dict:
 		)
 	return {
 		"id": access["portal_record_id"],
+		"service_name": resolve_service_name(
+			access.get("record_service_name"),
+			access.get("registration_service_name"),
+			access.get("fallback_service_source"),
+			service_name_fallback,
+		),
 		"centres": sorted((access.get("centres") or "").split(",")),
 		"fields": fields,
 	}
@@ -220,6 +234,7 @@ def _grouped_response(
 	*,
 	policy_version: str,
 	expand: bool,
+	service_name_fallback: str = SERVICE_FALLBACK_UNSPECIFIED,
 	direct_truncated: bool = False,
 ) -> dict:
 	unique_direct = []
@@ -268,7 +283,7 @@ def _grouped_response(
 			group_map[key] = group
 			groups.append(group)
 		if record_id not in seen_records:
-			record = _masked_record(access, field_policies)
+			record = _masked_record(access, field_policies, service_name_fallback)
 			record["direct_match"] = True
 			group["records"].append(record)
 			seen_records.add(record_id)
@@ -311,7 +326,7 @@ def _grouped_response(
 			record_id = access["portal_record_id"]
 			if record_id not in selected_ids:
 				continue
-			record = _masked_record(access, field_policies)
+			record = _masked_record(access, field_policies, service_name_fallback)
 			record["direct_match"] = record_id in direct_ids
 			group["records"].append(record)
 			seen_records.add(record_id)
@@ -335,6 +350,7 @@ def _number_lookup_response(
 	field_policies: list[dict],
 	*,
 	truncated: bool,
+	service_name_fallback: str = SERVICE_FALLBACK_UNSPECIFIED,
 ) -> dict:
 	records = []
 	seen_underlying = set()
@@ -342,7 +358,7 @@ def _number_lookup_response(
 		if access["ccd_master_record"] in seen_underlying:
 			continue
 		seen_underlying.add(access["ccd_master_record"])
-		record = _masked_record(access, field_policies)
+		record = _masked_record(access, field_policies, service_name_fallback)
 		# The person number matched the canonical person, not a value copied onto
 		# any individual CCD record.
 		record["direct_match"] = False
@@ -384,7 +400,15 @@ def _search(context: PortalContext, criteria, *, override_reason: str | None = N
 				# A number lookup never falls back to an unsafe partial identity answer.
 				direct_accesses = []
 		result = (
-			_number_lookup_response(person, direct_accesses, field_policies, truncated=direct_truncated)
+			_number_lookup_response(
+				person,
+				direct_accesses,
+				field_policies,
+				truncated=direct_truncated,
+				service_name_fallback=(
+					getattr(settings, "service_name_fallback", None) or SERVICE_FALLBACK_UNSPECIFIED
+				),
+			)
 			if person
 			else {
 				"results": [],
@@ -439,6 +463,9 @@ def _search(context: PortalContext, criteria, *, override_reason: str | None = N
 			field_policies,
 			policy_version=policy["policy_version"],
 			expand=state["effective"],
+			service_name_fallback=(
+				getattr(settings, "service_name_fallback", None) or SERVICE_FALLBACK_UNSPECIFIED
+			),
 			direct_truncated=direct_truncated,
 		)
 	write_event(
@@ -523,9 +550,13 @@ def detail(record_id: str):
 	except frappe.PermissionError:
 		audit_denial("Detail Open", context=context, record_id=record_id)
 		raise
-	policy, fields = get_active_policy()
-	result = _masked_record(access, fields)
 	settings = frappe.get_single("CCD Portal Settings")
+	policy, fields = get_active_policy()
+	result = _masked_record(
+		access,
+		fields,
+		getattr(settings, "service_name_fallback", None) or SERVICE_FALLBACK_UNSPECIFIED,
+	)
 	if (
 		access.get("policy_version") == policy["policy_version"]
 		and _same_person_state(context, policy, settings)["effective"]
@@ -939,7 +970,12 @@ def break_glass(action: str, reason: str, payload=None):
 	if action == "detail":
 		access = ensure_record_access(str(payload.get("record_id") or ""), context)
 		_, fields = get_active_policy()
-		result = _masked_record(access, fields)
+		settings = frappe.get_single("CCD Portal Settings")
+		result = _masked_record(
+			access,
+			fields,
+			getattr(settings, "service_name_fallback", None) or SERVICE_FALLBACK_UNSPECIFIED,
+		)
 	elif action == "reveal":
 		settings = frappe.get_single("CCD Portal Settings")
 		_check_rate_limit(context, "reveal", settings.reveals_per_hour)

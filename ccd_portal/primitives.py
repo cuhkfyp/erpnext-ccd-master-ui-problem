@@ -7,10 +7,31 @@ from datetime import date
 
 
 UNIFIED_PERSON_PATTERN = re.compile(r"^HKSR-U([0-9]{9})([0-9])$")
+SERVICE_FALLBACK_UNSPECIFIED = "Service not specified"
+SERVICE_FALLBACK_SOURCE = "CCD database/source name"
+SERVICE_NAME_FALLBACKS = frozenset({SERVICE_FALLBACK_UNSPECIFIED, SERVICE_FALLBACK_SOURCE})
 
 
 def canonical_json(value) -> str:
 	return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def resolve_service_name(
+	record_service_name,
+	registration_service_name,
+	source_name,
+	fallback_mode: str,
+) -> str:
+	"""Resolve a display-only service label without exposing a source by default."""
+	for value in (record_service_name, registration_service_name):
+		label = str(value or "").strip()
+		if label:
+			return label
+	if fallback_mode == SERVICE_FALLBACK_SOURCE:
+		label = str(source_name or "").strip()
+		if label:
+			return label
+	return SERVICE_FALLBACK_UNSPECIFIED
 
 
 def is_valid_source_column(value: str) -> bool:

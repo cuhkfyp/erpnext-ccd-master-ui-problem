@@ -2,6 +2,8 @@ import frappe
 from frappe.installer import update_site_config
 from frappe.utils import cint
 
+from ccd_portal.primitives import SERVICE_FALLBACK_UNSPECIFIED, SERVICE_NAME_FALLBACKS
+
 
 REQUIRED_SETTING_DEFAULTS = {
 	"searches_per_hour": 60,
@@ -21,6 +23,7 @@ def after_install() -> None:
 	settings.concerns_per_hour = 10
 	settings.reveal_ttl_seconds = 120
 	settings.same_person_enabled = 0
+	settings.service_name_fallback = SERVICE_FALLBACK_UNSPECIFIED
 	settings.flags.same_person_governance = True
 	settings.save(ignore_permissions=True)
 	ensure_initial_draft_policy()
@@ -40,6 +43,12 @@ def ensure_settings_defaults() -> dict:
 		if cint(value) <= 0:
 			frappe.db.set_single_value("CCD Portal Settings", fieldname, default)
 			updated.append(fieldname)
+	service_fallback = frappe.db.get_single_value("CCD Portal Settings", "service_name_fallback")
+	if service_fallback not in SERVICE_NAME_FALLBACKS:
+		frappe.db.set_single_value(
+			"CCD Portal Settings", "service_name_fallback", SERVICE_FALLBACK_UNSPECIFIED
+		)
+		updated.append("service_name_fallback")
 	return {"updated": updated}
 
 

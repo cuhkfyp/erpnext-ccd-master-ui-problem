@@ -9,7 +9,11 @@ from ccd_portal.identity import identity_coverage, schema_status
 from ccd_portal.indexing import coverage_report, refresh_source
 from ccd_portal.install import ensure_settings_defaults
 from ccd_portal.policy import get_active_policy
-from ccd_portal.primitives import is_valid_source_column
+from ccd_portal.primitives import (
+	SERVICE_FALLBACK_UNSPECIFIED,
+	SERVICE_NAME_FALLBACKS,
+	is_valid_source_column,
+)
 from ccd_portal.security import (
 	AUTHORITIES,
 	clean_reason,
@@ -783,6 +787,11 @@ def get_same_person_rollout():
 	result = {
 		"global_enabled": bool(cint(settings.same_person_enabled)),
 		"pilot_users": sorted(row.user for row in (settings.same_person_pilot_users or []) if row.user),
+		"service_name_fallback": (
+			settings.service_name_fallback
+			if settings.service_name_fallback in SERVICE_NAME_FALLBACKS
+			else SERVICE_FALLBACK_UNSPECIFIED
+		),
 		"identity_schema": schema_status(),
 	}
 	write_event(
@@ -823,6 +832,29 @@ def set_same_person_pilots(users=None):
 		metadata={"pilot_count": len(users)},
 	)
 	return {"pilot_users": users}
+
+
+@frappe.whitelist()
+def set_service_name_fallback(fallback: str, reason: str):
+	"""Set the audited final fallback for per-record service display labels."""
+	require_post()
+	try:
+		context = require_system_manager(reason)
+	except Exception:
+		audit_denial("Service Name Fallback Change")
+		raise
+	reason = clean_reason(reason)
+	fallback = str(fallback or "").strip()
+	if fallback not in SERVICE_NAME_FALLBACKS:
+		frappe.throw(_("Select a valid missing-service fallback."), frappe.ValidationError)
+	frappe.db.set_single_value("CCD Portal Settings", "service_name_fallback", fallback)
+	write_event(
+		"Service Name Fallback Change",
+		context=context,
+		protected_value=reason,
+		metadata={"fallback": fallback},
+	)
+	return {"service_name_fallback": fallback}
 
 
 @frappe.whitelist()

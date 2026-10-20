@@ -144,17 +144,23 @@ def ensure_record_access(portal_record_id: str, context: PortalContext) -> dict:
 
 	query = f"""
 		SELECT r.name, r.portal_record_id, r.ccd_master_record, r.policy_version, r.source_modified,
+		       NULLIF(TRIM(m.service_name), '') AS record_service_name,
+		       NULLIF(TRIM(registration.service_name), '') AS registration_service_name,
+		       r.source_registration AS fallback_service_source,
 		       GROUP_CONCAT(DISTINCT rc.centre ORDER BY rc.centre) AS centres
 		  FROM `tabCCD Portal Record` r
+		  JOIN `tabCCD Master` m ON m.name = r.ccd_master_record
 		  JOIN `tabCCD Portal Source Profile` sp
 		    ON sp.canonical_source_id = r.source_registration
 		   AND sp.active = 1 AND COALESCE(sp.sync_pending, 0) = 0
+		  LEFT JOIN `tabCCD Registration` registration ON registration.name = sp.source_registration
 		  JOIN `tabCCD Portal Record Centre` rc ON rc.portal_record = r.name
 		 WHERE r.portal_record_id = %(record_id)s AND r.active = 1 AND rc.active = 1
 		   AND (rc.effective_from IS NULL OR rc.effective_from <= %(today)s)
 		   AND (rc.effective_to IS NULL OR rc.effective_to >= %(today)s)
 		   {centre_clause}
-		 GROUP BY r.name, r.portal_record_id, r.ccd_master_record, r.policy_version, r.source_modified
+		 GROUP BY r.name, r.portal_record_id, r.ccd_master_record, r.policy_version, r.source_modified,
+		          m.service_name, registration.service_name, r.source_registration
 		 LIMIT 1
 	"""
 	values: dict | list
