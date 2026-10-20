@@ -60,7 +60,14 @@
           <tbody>
             <tr v-for="row in rows" :key="row.name">
               <td v-for="field in config.columns" :key="field">{{ formatCell(row, field) }}</td>
-              <td><button class="secondary" :disabled="row.refresh_in_progress" @click="edit(row)">{{ __('Edit') }}</button> <button v-if="resource === 'source_profiles' && canActivatePolicy" class="secondary" :disabled="busy || (row.refresh_in_progress && !row.refresh_operation_token)" @click="refreshSource(row)">{{ sourceActionLabel(row) }}</button></td>
+              <td>
+                <button class="secondary" :disabled="row.refresh_in_progress" @click="edit(row)">{{ __('Edit') }}</button>
+                <template v-if="resource === 'source_profiles' && canActivatePolicy">
+                  <button v-if="row.refresh_in_progress && row.refresh_operation_token" class="secondary progress-action" :disabled="busy" :title="__('Open the existing operation. This does not start another refresh.')" @click="viewSourceRefresh(row)">{{ __('View refresh progress') }}</button>
+                  <button v-else-if="row.refresh_in_progress" class="secondary" disabled :title="__('Another System Manager is refreshing this source. Wait for completion before changing or refreshing it.')">{{ __('Refresh in progress') }}</button>
+                  <button v-else class="secondary" :disabled="busy" :title="__('Start one audited background refresh for this source.')" @click="refreshSource(row)">{{ sourceActionLabel(row) }}</button>
+                </template>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -188,7 +195,7 @@ function reset() { editing.value = ""; Object.keys(form).forEach((key) => delete
 function edit(row) { editing.value = row.name; reset(); editing.value = row.name; config.value.fields.forEach((field) => form[field.name] = field.type === "check" ? Boolean(row[field.name]) : field.type === "multiselect" ? [...(row[field.name] || [])] : (row[field.name] ?? "")); window.scrollTo({top:0,behavior:"smooth"}); }
 function columnLabel(field) { if (field === "fixed_centres_display") return __("Fixed centre(s)"); if (field === "canonical_source_id") return __("Stable CCD source"); if (field === "refresh_status") return __("Index refresh"); return config.value?.fields.find((item) => item.name === field)?.label || field.replaceAll("_", " "); }
 function formatCell(row, field) { if (resource.value === "source_profiles" && ((field === "parser_type" && row.assignment_mode === "Fixed Centres") || (field === "authoritative_centre_column" && row.assignment_mode === "Fixed Centres"))) return "—"; if (field === "refresh_status") { if (row.refresh_status) return `${row.refresh_status}${row.refresh_total ? ` ${row.refresh_processed || 0}/${row.refresh_total}` : ""}`; return row.sync_pending ? __("Pending") : __("Ready"); } const value = row[field]; return Array.isArray(value) ? (value.join(", ") || "—") : (value ?? ""); }
-function sourceActionLabel(row) { if (row.refresh_in_progress) return row.refresh_operation_token ? __("View refresh progress") : __("Refresh in progress"); if (!row.sync_pending) return __("Refresh only"); return row.assignment_mode === "Per-record Centre Key" ? __("Complete sync and refresh") : __("Retry refresh"); }
+function sourceActionLabel(row) { if (!row.sync_pending) return __("Refresh only"); return row.assignment_mode === "Per-record Centre Key" ? __("Complete sync and refresh") : __("Retry refresh"); }
 function delay(milliseconds) { return new Promise((resolve) => window.setTimeout(resolve, milliseconds)); }
 function updateSourceRefreshRow(operationToken, state) {
   const row = rows.value.find((item) => item.refresh_operation_token === operationToken);
@@ -202,6 +209,7 @@ function updateSourceRefreshRow(operationToken, state) {
   });
 }
 function beginSourceRefresh(operation) { sourceRefresh.value = {...operation,processed_records:operation.processed_records || 0}; updateSourceRefreshRow(operation.operation_token, sourceRefresh.value); warning.value = `${__("Source saved and disabled while its index refresh runs in the background.")} ${__("You may leave this page and return to view progress.")}`; void monitorSourceRefresh(operation.operation_token); }
+function viewSourceRefresh(row) { sourceRefresh.value = {operation_token:row.refresh_operation_token,status:row.refresh_status,processed_records:row.refresh_processed || 0,total_records:row.refresh_total || 0}; warning.value = __("Showing the existing background refresh. No new refresh was started."); void monitorSourceRefresh(row.refresh_operation_token); }
 async function monitorSourceRefresh(operationToken) {
   const monitor = ++sourceRefreshMonitor;
   while (monitor === sourceRefreshMonitor) {
@@ -266,7 +274,7 @@ async function saveResource() {
     reset(); await Promise.all([load(),loadReferences()]);
   } catch(e) { error.value=e.message; } finally { busy.value=false; }
 }
-async function refreshSource(row) { busy.value=true; error.value=""; message.value=""; warning.value=""; try { if (row.refresh_in_progress && row.refresh_operation_token) { beginSourceRefresh({operation_token:row.refresh_operation_token,status:row.refresh_status,processed_records:row.refresh_processed,total_records:row.refresh_total}); return; } if (String(refreshReason.value || "").trim().length < 3) throw new Error(__("Enter a System Manager reason before refreshing the source index.")); const response=row.sync_pending && row.assignment_mode === "Per-record Centre Key" ? await call("ccd_portal.admin.complete_source_sync",{reason:refreshReason.value,source:row.source_registration}) : await call("ccd_portal.source_refresh.start_source_refresh",{reason:refreshReason.value,source:row.source_registration}); const operation=response.refresh_operation || response; refreshReason.value=""; beginSourceRefresh(operation); await load(); } catch(e) { error.value=e.message; } finally { busy.value=false; } }
+async function refreshSource(row) { busy.value=true; error.value=""; message.value=""; warning.value=""; try { if (row.refresh_in_progress) throw new Error(__("This source already has a background refresh in progress.")); if (String(refreshReason.value || "").trim().length < 3) throw new Error(__("Enter a System Manager reason before refreshing the source index.")); const response=row.sync_pending && row.assignment_mode === "Per-record Centre Key" ? await call("ccd_portal.admin.complete_source_sync",{reason:refreshReason.value,source:row.source_registration}) : await call("ccd_portal.source_refresh.start_source_refresh",{reason:refreshReason.value,source:row.source_registration}); const operation=response.refresh_operation || response; refreshReason.value=""; beginSourceRefresh(operation); await load(); } catch(e) { error.value=e.message; } finally { busy.value=false; } }
 function resetPolicy() { policy.name=""; policy.version=""; policy.title=""; policy.same_person_enabled=false; policy.fields="[]"; }
 function yesNo(value) { return value ? __("Yes") : __("No"); }
 function viewPolicy(row) { viewingPolicy.value=row; requestAnimationFrame(()=>document.querySelector(".policy-detail")?.scrollIntoView({behavior:"smooth",block:"start"})); }

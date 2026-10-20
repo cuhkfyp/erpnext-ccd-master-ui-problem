@@ -215,6 +215,11 @@ class RepositoryContractTests(unittest.TestCase):
 		self.assertIn("function updateSourceRefreshRow(operationToken, state)", panel)
 		self.assertIn("updateSourceRefreshRow(operationToken, state);", panel)
 		self.assertIn("refresh_processed: Number(state.processed_records", panel)
+		self.assertIn('v-if="row.refresh_in_progress && row.refresh_operation_token"', panel)
+		self.assertIn('v-else-if="row.refresh_in_progress"', panel)
+		self.assertIn('function viewSourceRefresh(row)', panel)
+		self.assertIn("No new refresh was started.", panel)
+		self.assertIn("This source already has a background refresh in progress.", panel)
 		self.assertIn("onBeforeUnmount", panel)
 
 	def test_amended_registration_uses_canonical_agent_source(self):
