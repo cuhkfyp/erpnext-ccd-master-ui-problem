@@ -90,6 +90,17 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		self.assertIn("record.service_name", app)
 		self.assertNotIn("record.fallback_service_source", app)
 
+	def test_rollout_controls_distinguish_busy_from_unavailable(self):
+		panel = (ROOT / "frontend" / "src" / "components" / "AdminPanel.vue").read_text()
+		style = (ROOT / "frontend" / "src" / "style.css").read_text()
+		self.assertIn(":title=\"globalEnableTitle\"", panel)
+		self.assertIn(":title=\"globalDisableTitle\"", panel)
+		self.assertIn(":class=\"{ 'is-busy': busy }\"", panel)
+		self.assertIn("cursor:not-allowed", style)
+		self.assertIn(".primary.is-busy:disabled", style)
+		self.assertIn("cursor:progress", style)
+		self.assertNotIn(".primary:disabled { opacity:.55; cursor:wait; }", style)
+
 	def test_successful_identity_resolution_does_not_disable_expansion(self):
 		tree = ast.parse((ROOT / "ccd_portal" / "api.py").read_text())
 		grouped = next(

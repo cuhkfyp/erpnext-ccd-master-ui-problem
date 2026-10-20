@@ -116,7 +116,11 @@
       </div>
       <template v-if="canActivatePolicy">
         <div class="field" style="margin-top:1rem"><label for="rollout-reason">{{ __('System Manager reason') }}</label><input id="rollout-reason" v-model="rolloutReason" maxlength="500" autocomplete="off" /></div>
-        <div class="actions"><button class="secondary" :disabled="busy || rolloutServiceFallback === rollout?.service_name_fallback" @click="saveServiceFallback">{{ __('Save service fallback') }}</button><button class="primary" :disabled="busy || rollout?.global_enabled" @click="setGlobalRollout(true)">{{ __('Enable globally') }}</button><button class="secondary" :disabled="busy || !rollout?.global_enabled" @click="setGlobalRollout(false)">{{ __('Disable globally') }}</button></div>
+        <div class="actions">
+          <button class="secondary" :class="{ 'is-busy': busy }" :aria-busy="busy" :disabled="busy || rolloutServiceFallback === rollout?.service_name_fallback" @click="saveServiceFallback">{{ __('Save service fallback') }}</button>
+          <button class="primary" :class="{ 'is-busy': busy }" :aria-busy="busy" :disabled="busy || rollout?.global_enabled" :title="globalEnableTitle" @click="setGlobalRollout(true)">{{ __('Enable globally') }}</button>
+          <button class="secondary" :class="{ 'is-busy': busy }" :aria-busy="busy" :disabled="busy || !rollout?.global_enabled" :title="globalDisableTitle" @click="setGlobalRollout(false)">{{ __('Disable globally') }}</button>
+        </div>
       </template>
     </template>
 
@@ -162,6 +166,16 @@ const v2Clone = reactive({version:"",title:""});
 const config = computed(() => configs[resource.value]);
 const clientProfileOptions = computed(() => (references.value.profiles || []).filter((option) => ["Reader","Operator","Data Steward"].includes(option.authority)));
 const visibleFields = computed(() => (config.value?.fields || []).filter((field) => !field.showWhen || Object.entries(field.showWhen).every(([key,value]) => form[key] === value)));
+const globalEnableTitle = computed(() => busy.value
+  ? __("A governance request is in progress.")
+  : rollout.value?.global_enabled
+    ? __("Same-person search is already enabled globally.")
+    : __("Enable same-person search for every otherwise eligible portal user."));
+const globalDisableTitle = computed(() => busy.value
+  ? __("A governance request is in progress.")
+  : rollout.value?.global_enabled
+    ? __("Disable global same-person search; named pilots remain independently eligible.")
+    : __("Same-person search is already disabled globally."));
 const submitLabel = computed(() => resource.value === "source_profiles" && canActivatePolicy ? (form.assignment_mode === "Per-record Centre Key" ? __("Save per-record configuration") : (editing.value ? __("Save and refresh index") : __("Create and refresh index"))) : (editing.value ? __("Update") : __("Create")));
 
 function optionsFor(field) {

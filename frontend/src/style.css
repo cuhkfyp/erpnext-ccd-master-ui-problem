@@ -46,7 +46,9 @@ button, input, select, textarea { font: inherit; }
 .field textarea { min-height:6rem; resize:vertical; }
 .actions { display:flex; flex-wrap:wrap; gap:.6rem; align-items:center; margin-top:1rem; }
 .primary, .secondary, .danger { border:0; border-radius:.55rem; padding:.62rem .95rem; cursor:pointer; font-weight:650; }
-.primary { color:white; background:#1d5a3c; }.primary:hover { background:#164b31; }.primary:disabled { opacity:.55; cursor:wait; }
+.primary { color:white; background:#1d5a3c; }.primary:hover { background:#164b31; }
+.primary:disabled, .secondary:disabled, .danger:disabled { opacity:.55; cursor:not-allowed; }
+.primary.is-busy:disabled, .secondary.is-busy:disabled, .danger.is-busy:disabled { cursor:progress; }
 .button-link { display:inline-block; text-decoration:none; }
 .secondary { color:#234432; background:#e7f0eb; }.danger { color:#842029; background:#f8d7da; }
 .results { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr)); gap:1rem; margin-top:1rem; }
