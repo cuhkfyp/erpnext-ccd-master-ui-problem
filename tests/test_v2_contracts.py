@@ -124,7 +124,7 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 			"same-person expansion must only be disabled when identity resolution fails",
 		)
 
-	def test_exact_chinese_first_name_uses_two_step_same_person_flow(self):
+	def test_exact_first_names_use_two_step_same_person_flow(self):
 		api = (ROOT / "ccd_portal" / "api.py").read_text()
 		app = (ROOT / "frontend" / "src" / "App.vue").read_text()
 		settings = json.loads(
@@ -132,12 +132,17 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		)
 		fields = {row["fieldname"]: row for row in settings["fields"]}
 		self.assertEqual(fields["chinese_first_name_searches_per_hour"]["default"], "10")
-		self.assertIn('"chinese-first-name-search"', api)
-		self.assertIn('state["effective"] and not chinese_first_name_only', api)
+		self.assertEqual(
+			fields["chinese_first_name_searches_per_hour"]["label"],
+			"Exact First Name Searches per Hour",
+		)
+		self.assertIn('"first-name-search"', api)
+		self.assertIn('state["effective"] and not first_name_only', api)
 		self.assertIn("def same_person_records(record_id: str)", api)
-		self.assertNotIn("Chinese First Name Search", api)
+		self.assertNotIn('write_event("First Name Search"', api)
 		self.assertIn("Show confirmed same-person records", app)
-		self.assertIn("searchedByChineseFirstNameOnly && selected.can_expand_same_person", app)
+		self.assertIn("searchedByFirstNameOnly && selected.can_expand_same_person", app)
+		self.assertIn('["eng_firstname","chi_firstname"].includes', app)
 		self.assertIn("ccd_portal.api.same_person_records", app)
 
 	def test_concern_queue_encrypts_context_and_limits_reporter_visibility(self):

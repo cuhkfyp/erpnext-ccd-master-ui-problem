@@ -10,14 +10,14 @@ UNIFIED_PERSON_PATTERN = re.compile(r"^HKSR-U([0-9]{9})([0-9])$")
 SERVICE_FALLBACK_UNSPECIFIED = "Service not specified"
 SERVICE_FALLBACK_SOURCE = "CCD database/source name"
 SERVICE_NAME_FALLBACKS = frozenset({SERVICE_FALLBACK_UNSPECIFIED, SERVICE_FALLBACK_SOURCE})
-CHINESE_FIRST_NAME_FIELD = "chi_firstname"
+FIRST_NAME_FIELDS = frozenset({"eng_firstname", "chi_firstname"})
 
 
-def is_chinese_first_name_only(criteria: list[dict]) -> bool:
+def is_first_name_only(criteria: list[dict]) -> bool:
 	"""Identify the governed weak-name exception without treating names as IDs."""
 	return bool(
 		len(criteria) == 1
-		and criteria[0].get("fieldname") == CHINESE_FIRST_NAME_FIELD
+		and criteria[0].get("fieldname") in FIRST_NAME_FIELDS
 		and criteria[0].get("source") == "CCD Master"
 		and criteria[0].get("data_kind") == "Name"
 	)

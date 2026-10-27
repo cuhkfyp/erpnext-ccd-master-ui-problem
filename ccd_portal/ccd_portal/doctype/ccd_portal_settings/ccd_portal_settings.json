@@ -9,7 +9,7 @@
   {"fieldname":"same_person_pilot_users","fieldtype":"Table","label":"Same-Person Pilot Users","options":"CCD Portal Same Person Pilot User","description":"Environment-owned named staff pilots; never export this table."},
   {"fieldname":"service_name_fallback","fieldtype":"Select","label":"Missing Service Name Fallback","options":"Service not specified\nCCD database/source name","default":"Service not specified","reqd":1,"description":"Controls the final display label only when both the CCD record and current registration have no service name."},
   {"fieldname":"searches_per_hour","fieldtype":"Int","label":"Searches per Hour","default":"60","reqd":1},
-  {"fieldname":"chinese_first_name_searches_per_hour","fieldtype":"Int","label":"Chinese First Name Searches per Hour","default":"10","reqd":1,"description":"Separate per-user limit for the exact Chinese First Name-only search exception."},
+  {"fieldname":"chinese_first_name_searches_per_hour","fieldtype":"Int","label":"Exact First Name Searches per Hour","default":"10","reqd":1,"description":"Shared per-user limit for exact English or Chinese First Name-only searches. The stable field name is retained for upgrade compatibility."},
   {"fieldname":"reveals_per_hour","fieldtype":"Int","label":"Reveals per Hour","default":"20","reqd":1},
   {"fieldname":"concerns_per_hour","fieldtype":"Int","label":"Identity Concerns per Hour","default":"10","reqd":1},
   {"fieldname":"reveal_ttl_seconds","fieldtype":"Int","label":"Reveal TTL Seconds","default":"120","reqd":1}

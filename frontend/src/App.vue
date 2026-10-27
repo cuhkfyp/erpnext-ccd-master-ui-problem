@@ -25,7 +25,7 @@
         <template v-if="view === 'search'">
           <section class="card">
             <h2>{{ __('Find a client record') }}</h2>
-            <p class="muted">{{ __('Use one policy-approved exact identifier, an exact Chinese First Name, or combine another name with date of birth. Browse and fuzzy search are unavailable.') }}</p>
+            <p class="muted">{{ __('Use one policy-approved exact identifier, an exact English or Chinese First Name, or combine another name with date of birth. Browse and fuzzy search are unavailable.') }}</p>
             <form @submit.prevent="runSearch">
               <div class="grid">
                 <div v-for="(criterion,index) in criteria" :key="index" class="field">
@@ -76,7 +76,7 @@
               </section>
             </template>
             <p v-if="revealed" class="notice" style="margin-top:1rem">{{ __('Revealed values clear automatically in') }} {{ revealSeconds }}s. {{ __('Do not copy them into notes or browser storage.') }}</p>
-            <div class="actions"><button v-if="searchedByChineseFirstNameOnly && selected.can_expand_same_person && !samePersonGroup" class="secondary" :disabled="busy" @click="showSamePerson">{{ __('Show confirmed same-person records') }}</button><button v-if="canReveal" class="primary" @click="showReveal=true">{{ __('Temporarily reveal eligible fields') }}</button><button v-if="canCorrect" class="secondary" @click="openCorrection">{{ __('Request a correction') }}</button></div>
+            <div class="actions"><button v-if="searchedByFirstNameOnly && selected.can_expand_same_person && !samePersonGroup" class="secondary" :disabled="busy" @click="showSamePerson">{{ __('Show confirmed same-person records') }}</button><button v-if="canReveal" class="primary" @click="showReveal=true">{{ __('Temporarily reveal eligible fields') }}</button><button v-if="canCorrect" class="secondary" @click="openCorrection">{{ __('Request a correction') }}</button></div>
             <section v-if="samePersonGroup && samePersonGroup.records.length > 1" class="detail-group" style="margin-top:1rem">
               <div class="person-heading"><strong>{{ __('Confirmed same person') }}</strong></div>
               <div v-if="samePersonGroup.person_fields.length" class="record-fields"><div v-for="field in samePersonGroup.person_fields" :key="field.fieldname" class="record-field"><small>{{ field.label }}</small><strong>{{ field.value || '—' }}</strong></div></div>
@@ -120,7 +120,7 @@ import AdminPanel from "./components/AdminPanel.vue";
 const __ = (text) => text;
 const sessionAuthenticated = Boolean(window.ccd_portal_authenticated);
 const loading = ref(true), busy = ref(false), error = ref(""), message = ref(""), boot = ref(null), unauthenticated = ref(!sessionAuthenticated), view = ref("search"), detailSection = ref("details");
-const criteria = reactive([{fieldname:"",value:""}]), results = ref([]), searchRecordCount = ref(0), searched = ref(false), searchedByChineseFirstNameOnly = ref(false), selected = ref(null), samePersonGroup = ref(null), revealed = ref(null), revealSeconds = ref(0), correctionRows = ref([]), concernRows = ref([]);
+const criteria = reactive([{fieldname:"",value:""}]), results = ref([]), searchRecordCount = ref(0), searched = ref(false), searchedByFirstNameOnly = ref(false), selected = ref(null), samePersonGroup = ref(null), revealed = ref(null), revealSeconds = ref(0), correctionRows = ref([]), concernRows = ref([]);
 const showReveal = ref(false), showCorrection = ref(false), decisionRequest = ref(null), decisionReview = ref(null), concernGroup = ref(null);
 const revealForm = reactive({reason_code:"",context_note:""});
 const correctionForm = reactive({changes:{},selected:{},reason:"",centre:""});
@@ -148,7 +148,7 @@ function inputType(fieldname) { const kind=searchFields.value.find((f)=>f.fieldn
 function clearReveal() { revealed.value=null; revealSeconds.value=0; if(revealTimer) clearTimeout(revealTimer); if(countdownTimer) clearInterval(countdownTimer); revealTimer=null; countdownTimer=null; }
 function clearSelected() { clearReveal(); selected.value=null; samePersonGroup.value=null; detailSection.value="details"; }
 function setError(e) { error.value=e.message || __("The request could not be completed."); unauthenticated.value=e.status===401 || (!sessionAuthenticated && e.status===403); }
-async function runSearch() { busy.value=true; error.value=""; message.value=""; clearSelected(); const submitted=criteria.map((row)=>({...row})); try { const data=await call("ccd_portal.api.search",{criteria:submitted}); results.value=data.results; searchRecordCount.value=data.record_count; searched.value=true; searchedByChineseFirstNameOnly.value=submitted.length===1 && submitted[0].fieldname==="chi_firstname"; criteria.forEach((row)=>row.value=""); } catch(e){searchedByChineseFirstNameOnly.value=false;setError(e);} finally{busy.value=false;} }
+async function runSearch() { busy.value=true; error.value=""; message.value=""; clearSelected(); const submitted=criteria.map((row)=>({...row})); try { const data=await call("ccd_portal.api.search",{criteria:submitted}); results.value=data.results; searchRecordCount.value=data.record_count; searched.value=true; searchedByFirstNameOnly.value=submitted.length===1 && ["eng_firstname","chi_firstname"].includes(submitted[0].fieldname); criteria.forEach((row)=>row.value=""); } catch(e){searchedByFirstNameOnly.value=false;setError(e);} finally{busy.value=false;} }
 async function openDetail(id) { busy.value=true; error.value=""; clearReveal(); samePersonGroup.value=null; detailSection.value="details"; try { selected.value=await call("ccd_portal.api.detail",{record_id:id}); selected.value && window.scrollTo({top:document.body.scrollHeight,behavior:"smooth"}); } catch(e){setError(e);} finally{busy.value=false;} }
 async function showSamePerson() { if(!selected.value)return; busy.value=true; error.value=""; message.value=""; try { const data=await call("ccd_portal.api.same_person_records",{record_id:selected.value.id}); samePersonGroup.value=data.results?.find((group)=>group.records?.length>1) || null; if(!samePersonGroup.value)message.value=__("No additional accessible confirmed same-person records were found."); } catch(e){setError(e);} finally{busy.value=false;} }
 async function doReveal() { busy.value=true; error.value=""; try { revealed.value=await call("ccd_portal.api.reveal",{record_id:selected.value.id,...revealForm}); revealSeconds.value=revealed.value.expires_in; showReveal.value=false; revealForm.reason_code=""; revealForm.context_note=""; countdownTimer=setInterval(()=>revealSeconds.value=Math.max(0,revealSeconds.value-1),1000); revealTimer=setTimeout(clearReveal,revealed.value.expires_in*1000); } catch(e){setError(e);} finally{busy.value=false;} }
