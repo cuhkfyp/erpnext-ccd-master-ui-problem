@@ -52,6 +52,7 @@ button, input, select, textarea { font: inherit; }
 .button-link { display:inline-block; text-decoration:none; }
 .secondary { color:#234432; background:#e7f0eb; }.danger { color:#842029; background:#f8d7da; }
 .results { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr)); gap:1rem; margin-top:1rem; }
+.results > .card { margin-top:0; }
 .result { cursor:pointer; transition:transform .15s,border-color .15s; }.result:hover { transform:translateY(-2px); border-color:#82a890; }
 .person-result { display:flex; flex-direction:column; gap:.8rem; }
 .person-heading { color:#164b31; }

@@ -82,6 +82,11 @@ class RepositoryContractTests(unittest.TestCase):
 		for fieldname in ("res_addr1", "post_addr1", "contact1_name", "contact2_phone"):
 			self.assertIn(f'("{fieldname}"', install)
 
+	def test_result_cards_override_the_stacked_card_margin(self):
+		style = (ROOT / "frontend" / "src" / "style.css").read_text(encoding="utf-8")
+		self.assertIn(".card + .card { margin-top:1rem; }", style)
+		self.assertIn(".results > .card { margin-top:0; }", style)
+
 	def test_login_action_distinguishes_guest_from_denied_user(self):
 		page = (ROOT / "ccd_portal" / "www" / "ccd_portal.py").read_text(encoding="utf-8")
 		app = (ROOT / "frontend" / "src" / "App.vue").read_text(encoding="utf-8")
