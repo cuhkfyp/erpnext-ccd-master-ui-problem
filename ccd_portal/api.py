@@ -20,6 +20,7 @@ from ccd_portal.identity_rules import bounded_record_order
 from ccd_portal.policy import get_active_policy, policy_field_map, public_policy, reveal_allowed
 from ccd_portal.primitives import (
 	SERVICE_FALLBACK_UNSPECIFIED,
+	is_chinese_first_name_only,
 	is_valid_unified_person_number,
 	resolve_service_name,
 )
@@ -82,7 +83,10 @@ def _reason_exists(reason_code: str) -> bool:
 def _search_criteria(criteria, field_map: dict[str, dict]) -> list[dict]:
 	criteria = _json(criteria, list)
 	if not 1 <= len(criteria) <= 5:
-		frappe.throw(_("Use an approved identifier or name with date of birth."), frappe.ValidationError)
+		frappe.throw(
+			_("Use an approved identifier, exact Chinese First Name, or name with date of birth."),
+			frappe.ValidationError,
+		)
 	normalized: list[dict] = []
 	for item in criteria:
 		if not isinstance(item, dict) or set(item) - {"fieldname", "value"}:
@@ -116,8 +120,11 @@ def _search_criteria(criteria, field_map: dict[str, dict]) -> list[dict]:
 	combined_name_dob = any(row["data_kind"] == "Name" for row in normalized) and any(
 		row["data_kind"] == "Date" for row in normalized
 	)
-	if not approved and not combined_name_dob:
-		frappe.throw(_("Use an approved identifier or name with date of birth."), frappe.ValidationError)
+	if not approved and not combined_name_dob and not is_chinese_first_name_only(normalized):
+		frappe.throw(
+			_("Use an approved identifier, exact Chinese First Name, or name with date of birth."),
+			frappe.ValidationError,
+		)
 	return normalized
 
 
@@ -383,8 +390,16 @@ def _search(context: PortalContext, criteria, *, override_reason: str | None = N
 	_check_rate_limit(context, "search", settings.searches_per_hour)
 	policy, field_map = policy_field_map()
 	normalized = _search_criteria(criteria, field_map)
+	chinese_first_name_only = is_chinese_first_name_only(normalized)
+	if chinese_first_name_only:
+		_check_rate_limit(
+			context,
+			"chinese-first-name-search",
+			getattr(settings, "chinese_first_name_searches_per_hour", 10) or 10,
+		)
 	_, field_policies = get_active_policy()
 	state = _same_person_state(context, policy, settings)
+	same_person_applied = bool(state["effective"] and not chinese_first_name_only)
 	direct_accesses: list[dict] = []
 	direct_truncated = False
 	if normalized[0]["source"] == "Unified Person":
@@ -462,7 +477,7 @@ def _search(context: PortalContext, criteria, *, override_reason: str | None = N
 			context,
 			field_policies,
 			policy_version=policy["policy_version"],
-			expand=state["effective"],
+			expand=same_person_applied,
 			service_name_fallback=(
 				getattr(settings, "service_name_fallback", None) or SERVICE_FALLBACK_UNSPECIFIED
 			),
@@ -482,7 +497,7 @@ def _search(context: PortalContext, criteria, *, override_reason: str | None = N
 		metadata={
 			"result_count": result["record_count"],
 			"truncated": result["truncated"],
-			"same_person_applied": bool(state["effective"]),
+			"same_person_applied": same_person_applied,
 			"duration_ms": round((time.perf_counter() - started) * 1000, 2),
 		},
 	)
@@ -557,6 +572,7 @@ def detail(record_id: str):
 		fields,
 		getattr(settings, "service_name_fallback", None) or SERVICE_FALLBACK_UNSPECIFIED,
 	)
+	result["can_expand_same_person"] = False
 	if (
 		access.get("policy_version") == policy["policy_version"]
 		and _same_person_state(context, policy, settings)["effective"]
@@ -567,11 +583,57 @@ def detail(record_id: str):
 			person = None
 		result["person_id"] = opaque_person_id(person["name"]) if person else ""
 		result["person_fields"] = _person_fields(person)
+		if person:
+			try:
+				accessible = _accessible_records_for_person(person, context, policy["policy_version"])
+			except Exception:
+				accessible = []
+			result["can_expand_same_person"] = len(accessible) > 1
 	write_event(
 		"Detail Open",
 		context=context,
 		portal_record_id=record_id,
 		metadata={"duration_ms": round((time.perf_counter() - started) * 1000, 2)},
+	)
+	return result
+
+
+@frappe.whitelist()
+def same_person_records(record_id: str):
+	"""Expand one selected record after a weak exact-name result, without a reason prompt."""
+	require_post()
+	started = time.perf_counter()
+	context = _require("Detail Open", *CLIENT_AUTHORITIES, require_centres=True)
+	try:
+		access = ensure_record_access(record_id, context)
+	except frappe.PermissionError:
+		audit_denial("Detail Open", context=context, record_id=record_id)
+		raise
+	settings = frappe.get_single("CCD Portal Settings")
+	policy, fields = get_active_policy()
+	can_expand = bool(
+		access.get("policy_version") == policy["policy_version"]
+		and _same_person_state(context, policy, settings)["effective"]
+	)
+	result = _grouped_response(
+		[access],
+		context,
+		fields,
+		policy_version=policy["policy_version"],
+		expand=can_expand,
+		service_name_fallback=(
+			getattr(settings, "service_name_fallback", None) or SERVICE_FALLBACK_UNSPECIFIED
+		),
+	)
+	write_event(
+		"Detail Open",
+		context=context,
+		portal_record_id=record_id,
+		metadata={
+			"same_person_expansion": True,
+			"result_count": result["record_count"],
+			"duration_ms": round((time.perf_counter() - started) * 1000, 2),
+		},
 	)
 	return result
 

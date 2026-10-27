@@ -1,6 +1,6 @@
 {
  "doctype":"DocType","name":"CCD Portal Settings","module":"CCD Portal","issingle":1,
- "field_order":["enabled","administrator_preview","preview_users","same_person_enabled","same_person_pilot_users","service_name_fallback","searches_per_hour","reveals_per_hour","concerns_per_hour","reveal_ttl_seconds"],
+ "field_order":["enabled","administrator_preview","preview_users","same_person_enabled","same_person_pilot_users","service_name_fallback","searches_per_hour","chinese_first_name_searches_per_hour","reveals_per_hour","concerns_per_hour","reveal_ttl_seconds"],
  "fields":[
   {"fieldname":"enabled","fieldtype":"Check","label":"Enabled","default":"0"},
   {"fieldname":"administrator_preview","fieldtype":"Check","label":"Administrator Preview","default":"1","read_only":1},
@@ -9,6 +9,7 @@
   {"fieldname":"same_person_pilot_users","fieldtype":"Table","label":"Same-Person Pilot Users","options":"CCD Portal Same Person Pilot User","description":"Environment-owned named staff pilots; never export this table."},
   {"fieldname":"service_name_fallback","fieldtype":"Select","label":"Missing Service Name Fallback","options":"Service not specified\nCCD database/source name","default":"Service not specified","reqd":1,"description":"Controls the final display label only when both the CCD record and current registration have no service name."},
   {"fieldname":"searches_per_hour","fieldtype":"Int","label":"Searches per Hour","default":"60","reqd":1},
+  {"fieldname":"chinese_first_name_searches_per_hour","fieldtype":"Int","label":"Chinese First Name Searches per Hour","default":"10","reqd":1,"description":"Separate per-user limit for the exact Chinese First Name-only search exception."},
   {"fieldname":"reveals_per_hour","fieldtype":"Int","label":"Reveals per Hour","default":"20","reqd":1},
   {"fieldname":"concerns_per_hour","fieldtype":"Int","label":"Identity Concerns per Hour","default":"10","reqd":1},
   {"fieldname":"reveal_ttl_seconds","fieldtype":"Int","label":"Reveal TTL Seconds","default":"120","reqd":1}

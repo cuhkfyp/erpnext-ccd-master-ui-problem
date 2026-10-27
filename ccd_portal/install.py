@@ -7,6 +7,7 @@ from ccd_portal.primitives import SERVICE_FALLBACK_UNSPECIFIED, SERVICE_NAME_FAL
 
 REQUIRED_SETTING_DEFAULTS = {
 	"searches_per_hour": 60,
+	"chinese_first_name_searches_per_hour": 10,
 	"reveals_per_hour": 20,
 	"concerns_per_hour": 10,
 	"reveal_ttl_seconds": 120,
@@ -19,6 +20,7 @@ def after_install() -> None:
 	settings.enabled = 0
 	settings.administrator_preview = 1
 	settings.searches_per_hour = 60
+	settings.chinese_first_name_searches_per_hour = 10
 	settings.reveals_per_hour = 20
 	settings.concerns_per_hour = 10
 	settings.reveal_ttl_seconds = 120

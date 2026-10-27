@@ -36,6 +36,7 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		patches = (ROOT / "ccd_portal" / "patches.txt").read_text()
 		self.assertIn("def ensure_settings_defaults()", install)
 		self.assertIn('"concerns_per_hour": 10', install)
+		self.assertIn('"chinese_first_name_searches_per_hour": 10', install)
 		self.assertIn("if cint(value) <= 0:", install)
 		self.assertIn("ensure_settings_defaults()", admin)
 		self.assertIn("backfill_settings_defaults", patches)
@@ -122,6 +123,22 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 			any(disable_assignments[0] in list(ast.walk(handler)) for handler in identity_try.handlers),
 			"same-person expansion must only be disabled when identity resolution fails",
 		)
+
+	def test_exact_chinese_first_name_uses_two_step_same_person_flow(self):
+		api = (ROOT / "ccd_portal" / "api.py").read_text()
+		app = (ROOT / "frontend" / "src" / "App.vue").read_text()
+		settings = json.loads(
+			(DOCTYPE_ROOT / "ccd_portal_settings" / "ccd_portal_settings.json").read_text()
+		)
+		fields = {row["fieldname"]: row for row in settings["fields"]}
+		self.assertEqual(fields["chinese_first_name_searches_per_hour"]["default"], "10")
+		self.assertIn('"chinese-first-name-search"', api)
+		self.assertIn('state["effective"] and not chinese_first_name_only', api)
+		self.assertIn("def same_person_records(record_id: str)", api)
+		self.assertNotIn("Chinese First Name Search", api)
+		self.assertIn("Show confirmed same-person records", app)
+		self.assertIn("searchedByChineseFirstNameOnly && selected.can_expand_same_person", app)
+		self.assertIn("ccd_portal.api.same_person_records", app)
 
 	def test_concern_queue_encrypts_context_and_limits_reporter_visibility(self):
 		api = (ROOT / "ccd_portal" / "api.py").read_text()

@@ -19,6 +19,11 @@
 - Add the missing record-leading search-token index so each source-refresh
   replacement targets one portal record instead of scanning the entire token
   table. The migration is idempotent for both upgrades and fresh installs.
+- Allow exact Chinese First Name as a narrowly bounded standalone portal search
+  without reclassifying Chinese Surname. Name-only results remain direct matches
+  until a user deliberately opens one and requests its confirmed, independently
+  authorized same-person records. No reason prompt or new audit-event type is
+  introduced, and a separate per-user hourly limit constrains enumeration.
 
 ## Unreleased - 2026-09-29
 

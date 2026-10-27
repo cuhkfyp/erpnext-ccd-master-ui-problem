@@ -5,6 +5,7 @@ from ccd_portal.primitives import (
 	SERVICE_FALLBACK_SOURCE,
 	SERVICE_FALLBACK_UNSPECIFIED,
 	canonical_json,
+	is_chinese_first_name_only,
 	is_valid_hkid,
 	is_valid_source_column,
 	mask_value,
@@ -14,6 +15,20 @@ from ccd_portal.primitives import (
 
 
 class PrimitiveTests(unittest.TestCase):
+	def test_only_chinese_first_name_is_the_standalone_weak_name_exception(self):
+		first_name = {"fieldname": "chi_firstname", "source": "CCD Master", "data_kind": "Name"}
+		self.assertTrue(is_chinese_first_name_only([first_name]))
+		self.assertFalse(
+			is_chinese_first_name_only(
+				[{"fieldname": "chi_surname", "source": "CCD Master", "data_kind": "Name"}]
+			)
+		)
+		self.assertFalse(
+			is_chinese_first_name_only(
+				[first_name, {"fieldname": "birthday", "source": "CCD Master", "data_kind": "Date"}]
+			)
+		)
+
 	def test_normalization_is_deterministic(self):
 		self.assertEqual(normalize_value("  Jane   DOE ", "Name"), "jane doe")
 		self.assertEqual(normalize_value("User@EXAMPLE.invalid", "Email"), "user@example.invalid")
