@@ -6,6 +6,7 @@ from ccd_portal.primitives import (
 	SERVICE_FALLBACK_UNSPECIFIED,
 	canonical_json,
 	is_first_name_only,
+	is_restricted_name_search,
 	is_valid_hkid,
 	is_valid_source_column,
 	mask_value,
@@ -47,6 +48,29 @@ class PrimitiveTests(unittest.TestCase):
 			)
 		)
 
+	def test_restricted_name_search_accepts_matching_first_and_surname_pairs(self):
+		def name(fieldname):
+			return {"fieldname": fieldname, "source": "CCD Master", "data_kind": "Name"}
+
+		self.assertTrue(is_restricted_name_search([name("eng_firstname")]))
+		self.assertTrue(
+			is_restricted_name_search([name("eng_firstname"), name("eng_surname")])
+		)
+		self.assertTrue(
+			is_restricted_name_search([name("chi_surname"), name("chi_firstname")])
+		)
+		self.assertFalse(is_restricted_name_search([name("eng_surname")]))
+		self.assertFalse(
+			is_restricted_name_search([name("eng_firstname"), name("chi_surname")])
+		)
+		self.assertFalse(
+			is_restricted_name_search(
+				[
+					name("eng_firstname"),
+					{"fieldname": "birthday", "source": "CCD Master", "data_kind": "Date"},
+				]
+			)
+		)
 	def test_normalization_is_deterministic(self):
 		self.assertEqual(normalize_value("  Jane   DOE ", "Name"), "jane doe")
 		self.assertEqual(normalize_value("User@EXAMPLE.invalid", "Email"), "user@example.invalid")

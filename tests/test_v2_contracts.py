@@ -134,15 +134,16 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		self.assertEqual(fields["chinese_first_name_searches_per_hour"]["default"], "10")
 		self.assertEqual(
 			fields["chinese_first_name_searches_per_hour"]["label"],
-			"Exact First Name Searches per Hour",
+			"Exact Name Searches per Hour",
 		)
 		self.assertIn('"first-name-search"', api)
-		self.assertIn('state["effective"] and not first_name_only', api)
+		self.assertIn('state["effective"] and not restricted_name_search', api)
 		self.assertIn("def same_person_records(record_id: str)", api)
 		self.assertNotIn('write_event("First Name Search"', api)
 		self.assertIn("Show confirmed same-person records", app)
-		self.assertIn("searchedByFirstNameOnly && selected.can_expand_same_person", app)
-		self.assertIn('["eng_firstname","chi_firstname"].includes', app)
+		self.assertIn("searchedByRestrictedName && selected.can_expand_same_person", app)
+		self.assertIn('["eng_firstname","eng_surname"]', app)
+		self.assertIn('["chi_firstname","chi_surname"]', app)
 		self.assertIn("searchTruncated.value=Boolean(data.truncated)", app)
 		self.assertIn("Showing the first 20 accessible exact matches.", app)
 		self.assertIn("ccd_portal.api.same_person_records", app)
@@ -151,7 +152,7 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		app = (ROOT / "frontend" / "src" / "App.vue").read_text()
 		self.assertIn(
 			"function clearSearchResults() { results.value=[]; searchRecordCount.value=0; "
-			"searchTruncated.value=false; searched.value=false; searchedByFirstNameOnly.value=false; }",
+			"searchTruncated.value=false; searched.value=false; searchedByRestrictedName.value=false; }",
 			app,
 		)
 		search_start = app.index("async function runSearch()")

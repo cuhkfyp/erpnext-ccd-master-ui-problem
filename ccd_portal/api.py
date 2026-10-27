@@ -20,7 +20,7 @@ from ccd_portal.identity_rules import bounded_record_order
 from ccd_portal.policy import get_active_policy, policy_field_map, public_policy, reveal_allowed
 from ccd_portal.primitives import (
 	SERVICE_FALLBACK_UNSPECIFIED,
-	is_first_name_only,
+	is_restricted_name_search,
 	is_valid_unified_person_number,
 	resolve_service_name,
 )
@@ -84,7 +84,7 @@ def _search_criteria(criteria, field_map: dict[str, dict]) -> list[dict]:
 	criteria = _json(criteria, list)
 	if not 1 <= len(criteria) <= 5:
 		frappe.throw(
-			_("Use an approved identifier, exact English or Chinese First Name, or name with date of birth."),
+			_("Use an approved identifier, an exact First Name, an exact same-language First Name and Surname, or a name with date of birth."),
 			frappe.ValidationError,
 		)
 	normalized: list[dict] = []
@@ -120,9 +120,9 @@ def _search_criteria(criteria, field_map: dict[str, dict]) -> list[dict]:
 	combined_name_dob = any(row["data_kind"] == "Name" for row in normalized) and any(
 		row["data_kind"] == "Date" for row in normalized
 	)
-	if not approved and not combined_name_dob and not is_first_name_only(normalized):
+	if not approved and not combined_name_dob and not is_restricted_name_search(normalized):
 		frappe.throw(
-			_("Use an approved identifier, exact English or Chinese First Name, or name with date of birth."),
+			_("Use an approved identifier, an exact First Name, an exact same-language First Name and Surname, or a name with date of birth."),
 			frappe.ValidationError,
 		)
 	return normalized
@@ -390,8 +390,8 @@ def _search(context: PortalContext, criteria, *, override_reason: str | None = N
 	_check_rate_limit(context, "search", settings.searches_per_hour)
 	policy, field_map = policy_field_map()
 	normalized = _search_criteria(criteria, field_map)
-	first_name_only = is_first_name_only(normalized)
-	if first_name_only:
+	restricted_name_search = is_restricted_name_search(normalized)
+	if restricted_name_search:
 		_check_rate_limit(
 			context,
 			"first-name-search",
@@ -399,7 +399,7 @@ def _search(context: PortalContext, criteria, *, override_reason: str | None = N
 		)
 	_, field_policies = get_active_policy()
 	state = _same_person_state(context, policy, settings)
-	same_person_applied = bool(state["effective"] and not first_name_only)
+	same_person_applied = bool(state["effective"] and not restricted_name_search)
 	direct_accesses: list[dict] = []
 	direct_truncated = False
 	if normalized[0]["source"] == "Unified Person":
