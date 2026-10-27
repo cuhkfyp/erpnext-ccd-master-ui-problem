@@ -147,6 +147,18 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		self.assertIn("Showing the first 20 accessible exact matches.", app)
 		self.assertIn("ccd_portal.api.same_person_records", app)
 
+	def test_each_search_clears_previous_results_before_the_request(self):
+		app = (ROOT / "frontend" / "src" / "App.vue").read_text()
+		self.assertIn(
+			"function clearSearchResults() { results.value=[]; searchRecordCount.value=0; "
+			"searchTruncated.value=false; searched.value=false; searchedByFirstNameOnly.value=false; }",
+			app,
+		)
+		search_start = app.index("async function runSearch()")
+		request = app.index('await call("ccd_portal.api.search"', search_start)
+		clear = app.index("clearSearchResults()", search_start)
+		self.assertLess(clear, request)
+
 	def test_concern_queue_encrypts_context_and_limits_reporter_visibility(self):
 		api = (ROOT / "ccd_portal" / "api.py").read_text()
 		concern = json.loads(
