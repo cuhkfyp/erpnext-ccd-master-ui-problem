@@ -23,7 +23,9 @@
   searches without reclassifying either surname. Name-only results remain direct matches
   until a user deliberately opens one and requests its confirmed, independently
   authorized same-person records. No reason prompt or new audit-event type is
-  introduced, and a separate per-user hourly limit constrains enumeration.
+  introduced, and a separate per-user hourly limit constrains enumeration. When
+  the 20-record cap truncates accessible exact matches, the interface asks the
+  user to add another criterion without disclosing the hidden match count.
 
 ## Unreleased - 2026-09-29
 

@@ -143,6 +143,8 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		self.assertIn("Show confirmed same-person records", app)
 		self.assertIn("searchedByFirstNameOnly && selected.can_expand_same_person", app)
 		self.assertIn('["eng_firstname","chi_firstname"].includes', app)
+		self.assertIn("searchTruncated.value=Boolean(data.truncated)", app)
+		self.assertIn("Showing the first 20 accessible exact matches.", app)
 		self.assertIn("ccd_portal.api.same_person_records", app)
 
 	def test_concern_queue_encrypts_context_and_limits_reporter_visibility(self):
