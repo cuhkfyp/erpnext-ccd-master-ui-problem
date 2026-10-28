@@ -19,6 +19,7 @@ def after_install() -> None:
 	settings = frappe.get_single("CCD Portal Settings")
 	settings.enabled = 0
 	settings.correction_requests_enabled = 0
+	settings.identity_concerns_enabled = 1
 	settings.administrator_preview = 1
 	settings.searches_per_hour = 60
 	settings.chinese_first_name_searches_per_hour = 10
@@ -46,6 +47,12 @@ def ensure_settings_defaults() -> dict:
 		if cint(value) <= 0:
 			frappe.db.set_single_value("CCD Portal Settings", fieldname, default)
 			updated.append(fieldname)
+	identity_concerns_enabled = frappe.db.get_single_value(
+		"CCD Portal Settings", "identity_concerns_enabled"
+	)
+	if identity_concerns_enabled is None:
+		frappe.db.set_single_value("CCD Portal Settings", "identity_concerns_enabled", 1)
+		updated.append("identity_concerns_enabled")
 	service_fallback = frappe.db.get_single_value("CCD Portal Settings", "service_name_fallback")
 	if service_fallback not in SERVICE_NAME_FALLBACKS:
 		frappe.db.set_single_value(

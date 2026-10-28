@@ -40,6 +40,7 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		self.assertIn("if cint(value) <= 0:", install)
 		self.assertIn("ensure_settings_defaults()", admin)
 		self.assertIn("backfill_settings_defaults", patches)
+		self.assertIn("enable_identity_concerns_on_upgrade", patches)
 
 	def test_v2_policy_virtual_field_is_fixed_and_not_correctable(self):
 		policy = json.loads((DOCTYPE_ROOT / "ccd_portal_policy" / "ccd_portal_policy.json").read_text())
@@ -192,6 +193,9 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		self.assertEqual(fields["status"]["options"], "Submitted\nIn Review\nResolved\nDismissed")
 		self.assertIn('"encrypted_context": encrypt(', api)
 		self.assertIn('filters={"reporter": context.user}', api)
+		self.assertIn("def _require_identity_concern_feature(", api)
+		self.assertGreaterEqual(api.count("_require_identity_concern_feature("), 3)
+		self.assertIn('getattr(settings, "identity_concerns_enabled", 1)', api)
 		self.assertIn('"CCD Match Sensitive Reviewer"', json.dumps(concern))
 		self.assertTrue(fields["status"]["read_only"])
 		self.assertTrue(fields["review_reason"]["read_only"])

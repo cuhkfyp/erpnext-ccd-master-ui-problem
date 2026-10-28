@@ -35,11 +35,13 @@ class RepositoryContractTests(unittest.TestCase):
 		)
 		fields = {field["fieldname"]: field for field in settings["fields"]}
 		self.assertEqual(fields["correction_requests_enabled"]["default"], "0")
+		self.assertEqual(fields["identity_concerns_enabled"]["default"], "1")
 		admin = (ROOT / "ccd_portal" / "admin.py").read_text()
 		api = (ROOT / "ccd_portal" / "api.py").read_text()
 		app = (ROOT / "frontend" / "src" / "App.vue").read_text()
 		panel = (ROOT / "frontend" / "src" / "components" / "AdminPanel.vue").read_text()
 		self.assertIn("def set_correction_requests_enabled(enabled: int)", admin)
+		self.assertIn("def set_portal_features(", admin)
 		self.assertIn('"Portal Feature Change"', admin)
 		self.assertIn('metadata={"stage": "feature_disabled"}', api)
 		self.assertIn('v-if="canRequestCorrection"', app)
@@ -47,6 +49,9 @@ class RepositoryContractTests(unittest.TestCase):
 		self.assertIn("Boolean(boot.value?.correction_requests_enabled)", app)
 		self.assertGreaterEqual(api.count("_require_correction_feature("), 5)
 		self.assertIn("Existing request records are retained", panel)
+		self.assertIn("Show suspected wrong-link reporting", panel)
+		self.assertIn("Report suspected wrong link and My identity concerns are hidden and blocked", panel)
+		self.assertIn("identityConcernsEnabled", panel)
 
 	def test_no_automatic_audit_retention_hook(self):
 		hooks = (ROOT / "ccd_portal" / "hooks.py").read_text(encoding="utf-8")

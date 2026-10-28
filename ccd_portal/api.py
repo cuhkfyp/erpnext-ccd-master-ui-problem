@@ -245,6 +245,22 @@ def _require_correction_feature(context: PortalContext, event_type: str, record_
 	frappe.throw(_("The correction workflow is not currently available."), frappe.PermissionError)
 
 
+def _require_identity_concern_feature(
+	context: PortalContext, event_type: str, record_id: str | None = None
+):
+	"""Gate staff reporting while allowing qualified reviewers to close existing concerns."""
+	settings = frappe.get_single("CCD Portal Settings")
+	if cint(getattr(settings, "identity_concerns_enabled", 1)):
+		return settings
+	audit_denial(
+		event_type,
+		context=context,
+		record_id=record_id,
+		metadata={"stage": "feature_disabled"},
+	)
+	frappe.throw(_("Identity concern reporting is not currently available."), frappe.PermissionError)
+
+
 def _accessible_records_for_person(
 	person: dict, context: PortalContext, policy_version: str
 ) -> list[dict]:
@@ -611,6 +627,9 @@ def bootstrap():
 		"correction_requests_enabled": bool(
 			cint(getattr(settings, "correction_requests_enabled", 0))
 		),
+		"identity_concerns_enabled": bool(
+			cint(getattr(settings, "identity_concerns_enabled", 1))
+		),
 		"reveal_ttl_seconds": cint(settings.reveal_ttl_seconds) or 120,
 		"is_access_administrator": context.authority == "Access Administrator",
 		"can_activate_policy": context.authority == "Access Administrator"
@@ -626,7 +645,9 @@ def bootstrap():
 			]
 		response["policy"] = published_policy
 		response["same_person"] = same_person
-		response["can_report_identity_concern"] = context.authority in {"Operator", "Data Steward"}
+		response["can_report_identity_concern"] = bool(
+			cint(getattr(settings, "identity_concerns_enabled", 1))
+		) and context.authority in {"Operator", "Data Steward"}
 		response["reveal_reasons"] = frappe.get_all(
 			"CCD Portal Reveal Reason",
 			filters={"active": 1},
@@ -899,7 +920,7 @@ def submit_identity_concern(record_ids=None, reason: str | None = None):
 	"""Report a suspected wrong link without changing identity or access state."""
 	require_post()
 	context = _require("Identity Concern Submitted", "Operator", "Data Steward", require_centres=True)
-	settings = frappe.get_single("CCD Portal Settings")
+	settings = _require_identity_concern_feature(context, "Identity Concern Submitted")
 	_check_rate_limit(context, "identity-concern", getattr(settings, "concerns_per_hour", 10) or 10)
 	reason = clean_reason(reason or "")
 	record_ids = _json(record_ids, list)
@@ -956,6 +977,7 @@ def submit_identity_concern(record_ids=None, reason: str | None = None):
 @frappe.whitelist()
 def identity_concerns():
 	context = _require("Identity Concern Status Opened", "Operator", "Data Steward", require_centres=True)
+	_require_identity_concern_feature(context, "Identity Concern Status Opened")
 	rows = frappe.get_all(
 		"CCD Portal Identity Concern",
 		filters={"reporter": context.user},
