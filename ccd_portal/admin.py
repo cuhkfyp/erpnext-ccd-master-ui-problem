@@ -401,8 +401,38 @@ def upsert_resource(resource: str, values=None, name: str | None = None):
 		fixed_centres = [centre.strip() for centre in fixed_centres if centre.strip()]
 	if resource == "profiles" and values.get("authority") not in AUTHORITIES:
 		frappe.throw(_("Select exactly one valid authority."), frappe.ValidationError)
+	if resource == "profiles" and not name:
+		existing_profile = frappe.db.get_value(
+			"CCD Portal User Profile", {"user": str(values.get("user") or "")}, "name"
+		)
+		if existing_profile:
+			frappe.throw(
+				_("This user already has a portal profile. Select Edit on the existing row instead."),
+				frappe.ValidationError,
+			)
 	if name:
 		doc = frappe.get_doc(doctype, name)
+		if (
+			resource == "profiles"
+			and doc.authority == "Access Administrator"
+			and cint(doc.active)
+			and (
+				values.get("authority") != "Access Administrator"
+				or not cint(values.get("active"))
+			)
+			and not frappe.db.count(
+				"CCD Portal User Profile",
+				{
+					"name": ["!=", doc.name],
+					"authority": "Access Administrator",
+					"active": 1,
+				},
+			)
+		):
+			frappe.throw(
+				_("Assign another active Access Administrator before changing or disabling this profile."),
+				frappe.ValidationError,
+			)
 		for fieldname in IMMUTABLE_RESOURCE_FIELDS.get(resource, ()):
 			if fieldname not in values or str(values[fieldname] or "") == str(doc.get(fieldname) or ""):
 				continue

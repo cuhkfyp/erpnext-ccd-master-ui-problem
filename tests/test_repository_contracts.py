@@ -120,6 +120,10 @@ class RepositoryContractTests(unittest.TestCase):
 		self.assertIn("View details", panel)
 		self.assertIn("CCD Master field", panel)
 		self.assertIn("viewPolicy(row)", panel)
+		self.assertIn("Use a separate Data Steward account for correction review", panel)
+		self.assertIn("!assigned.has(option.value)", panel)
+		self.assertIn("This user already has a portal profile", admin)
+		self.assertIn("Assign another active Access Administrator", admin)
 
 	def test_source_assignment_supports_fixed_and_per_record_centres(self):
 		profile = json.loads(
