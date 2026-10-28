@@ -177,6 +177,25 @@ def _masked_record(
 	}
 
 
+def _service_names(
+	accesses: list[dict], service_name_fallback: str = SERVICE_FALLBACK_UNSPECIFIED
+) -> list[str]:
+	"""Return distinct display-only service labels for already-authorized records."""
+	services = []
+	seen = set()
+	for access in accesses:
+		service = resolve_service_name(
+			access.get("record_service_name"),
+			access.get("registration_service_name"),
+			access.get("fallback_service_source"),
+			service_name_fallback,
+		)
+		if service not in seen:
+			seen.add(service)
+			services.append(service)
+	return services
+
+
 def _person_fields(person: dict | None, *, revealed: bool = False) -> list[dict]:
 	if not person:
 		return []
@@ -567,12 +586,16 @@ def detail(record_id: str):
 		raise
 	settings = frappe.get_single("CCD Portal Settings")
 	policy, fields = get_active_policy()
+	service_name_fallback = (
+		getattr(settings, "service_name_fallback", None) or SERVICE_FALLBACK_UNSPECIFIED
+	)
 	result = _masked_record(
 		access,
 		fields,
-		getattr(settings, "service_name_fallback", None) or SERVICE_FALLBACK_UNSPECIFIED,
+		service_name_fallback,
 	)
 	result["can_expand_same_person"] = False
+	result["services_used"] = _service_names([access], service_name_fallback)
 	if (
 		access.get("policy_version") == policy["policy_version"]
 		and _same_person_state(context, policy, settings)["effective"]
@@ -589,6 +612,8 @@ def detail(record_id: str):
 			except Exception:
 				accessible = []
 			result["can_expand_same_person"] = len(accessible) > 1
+			if accessible:
+				result["services_used"] = _service_names(accessible, service_name_fallback)
 	write_event(
 		"Detail Open",
 		context=context,
@@ -596,6 +621,48 @@ def detail(record_id: str):
 		metadata={"duration_ms": round((time.perf_counter() - started) * 1000, 2)},
 	)
 	return result
+
+
+@frappe.whitelist()
+def service_summary(record_id: str):
+	"""Return only distinct accessible service labels for one selected person."""
+	require_post()
+	started = time.perf_counter()
+	context = _require("Detail Open", *CLIENT_AUTHORITIES, require_centres=True)
+	try:
+		access = ensure_record_access(record_id, context)
+	except frappe.PermissionError:
+		audit_denial("Detail Open", context=context, record_id=record_id)
+		raise
+	settings = frappe.get_single("CCD Portal Settings")
+	policy, _fields = get_active_policy()
+	service_name_fallback = (
+		getattr(settings, "service_name_fallback", None) or SERVICE_FALLBACK_UNSPECIFIED
+	)
+	accessible = [access]
+	if (
+		access.get("policy_version") == policy["policy_version"]
+		and _same_person_state(context, policy, settings)["effective"]
+	):
+		try:
+			person = person_for_record(access["ccd_master_record"])
+			if person:
+				related = _accessible_records_for_person(person, context, policy["policy_version"])
+				if related:
+					accessible = related
+		except Exception:
+			# The direct record's service remains available when identity integration is unavailable.
+			pass
+	write_event(
+		"Detail Open",
+		context=context,
+		portal_record_id=record_id,
+		metadata={
+			"view": "service_summary",
+			"duration_ms": round((time.perf_counter() - started) * 1000, 2),
+		},
+	)
+	return {"services": _service_names(accessible, service_name_fallback)}
 
 
 @frappe.whitelist()

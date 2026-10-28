@@ -78,6 +78,7 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 
 	def test_service_fallback_is_reasoned_audited_and_only_returns_a_display_label(self):
 		admin = (ROOT / "ccd_portal" / "admin.py").read_text()
+		api = (ROOT / "ccd_portal" / "api.py").read_text()
 		security = (ROOT / "ccd_portal" / "security.py").read_text()
 		panel = (ROOT / "frontend" / "src" / "components" / "AdminPanel.vue").read_text()
 		app = (ROOT / "frontend" / "src" / "App.vue").read_text()
@@ -90,6 +91,14 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		self.assertIn("saveServiceFallback", panel)
 		self.assertIn("record.service_name", app)
 		self.assertNotIn("record.fallback_service_source", app)
+		self.assertIn('result["services_used"] = _service_names(accessible, service_name_fallback)', api)
+		self.assertIn("Only services from records within your centre access are shown.", app)
+		self.assertIn('v-for="service in serviceSummary"', app)
+		self.assertIn("selected.value?.services_used", app)
+		self.assertIn("def service_summary(record_id: str)", api)
+		self.assertIn('return {"services": _service_names(accessible, service_name_fallback)}', api)
+		self.assertIn('call("ccd_portal.api.service_summary"', app)
+		self.assertNotIn("document.body.scrollHeight", app)
 
 	def test_rollout_controls_distinguish_busy_from_unavailable(self):
 		panel = (ROOT / "frontend" / "src" / "components" / "AdminPanel.vue").read_text()
@@ -152,7 +161,8 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		app = (ROOT / "frontend" / "src" / "App.vue").read_text()
 		self.assertIn(
 			"function clearSearchResults() { results.value=[]; searchRecordCount.value=0; "
-			"searchTruncated.value=false; searched.value=false; searchedByRestrictedName.value=false; }",
+			"searchTruncated.value=false; searched.value=false; searchedByRestrictedName.value=false; "
+			"serviceSummary.value=[]; }",
 			app,
 		)
 		search_start = app.index("async function runSearch()")

@@ -53,6 +53,11 @@ button, input, select, textarea { font: inherit; }
 .secondary { color:#234432; background:#e7f0eb; }.danger { color:#842029; background:#f8d7da; }
 .results { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr)); gap:1rem; margin-top:1rem; }
 .results > .card { margin-top:0; }
+.service-summary { display:flex; align-items:center; justify-content:space-between; gap:1rem; min-height:4rem; margin-top:.8rem; padding:.8rem 1rem; border:1px solid #bdd3c5; border-radius:.75rem; background:#f4faf6; }
+.service-summary strong, .service-summary small { display:block; }
+.service-summary small { margin-top:.15rem; color:#66756d; }
+.service-summary .muted { margin:0; }
+.service-summary-labels { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:.25rem; }
 .result { cursor:pointer; transition:transform .15s,border-color .15s; }.result:hover { transform:translateY(-2px); border-color:#82a890; }
 .person-result { display:flex; flex-direction:column; gap:.8rem; }
 .person-heading { color:#164b31; }
@@ -67,4 +72,4 @@ button, input, select, textarea { font: inherit; }
 .modal-backdrop { position:fixed; inset:0; z-index:50; display:grid; place-items:center; padding:1rem; background:#0d2118aa; }
 .modal { width:min(620px,100%); max-height:90vh; overflow:auto; background:white; border-radius:1rem; padding:1.4rem; box-shadow:0 24px 80px #0004; }
 .table-wrap { overflow:auto; }.data-table { width:100%; border-collapse:collapse; font-size:.84rem; }.data-table th,.data-table td { text-align:left; border-bottom:1px solid #e4eae6; padding:.6rem; max-width:18rem; overflow-wrap:anywhere; }.data-table th { color:#526159; background:#f7f9f8; }
-@media (max-width:600px) { .account span:first-child { display:none; }.layout { width:min(100% - 1rem,1160px); margin-top:.6rem; }.card { border-radius:.7rem; }.topbar { padding:.8rem; } }
+@media (max-width:600px) { .account span:first-child { display:none; }.layout { width:min(100% - 1rem,1160px); margin-top:.6rem; }.card { border-radius:.7rem; }.topbar { padding:.8rem; }.service-summary { align-items:flex-start; flex-direction:column; }.service-summary-labels { justify-content:flex-start; } }

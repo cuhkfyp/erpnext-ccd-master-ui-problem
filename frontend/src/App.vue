@@ -49,6 +49,11 @@
           <section v-if="results.length" aria-live="polite">
             <p class="muted">{{ searchRecordCount }} {{ __('masked record(s); maximum 20') }}</p>
             <p v-if="searchTruncated" class="notice">{{ __('Showing the first 20 accessible exact matches. Add another criterion to narrow the results.') }}</p>
+            <section ref="serviceSummarySection" class="service-summary" aria-live="polite">
+              <div><strong>{{ __('Services used') }}</strong><small>{{ __('Only services from records within your centre access are shown.') }}</small></div>
+              <div v-if="serviceSummary.length" class="service-summary-labels"><span v-for="service in serviceSummary" :key="service" class="pill">{{ service }}</span></div>
+              <p v-else class="muted">{{ __('Select a record to view the accessible services used by that person.') }}</p>
+            </section>
             <div class="results">
               <section v-for="group in results" :key="group.person_id" class="card person-result">
                 <div v-if="group.relationship_label" class="person-heading"><strong>{{ group.relationship_label }}</strong></div>
@@ -114,14 +119,14 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { call } from "./api";
 import AdminPanel from "./components/AdminPanel.vue";
 
 const __ = (text) => text;
 const sessionAuthenticated = Boolean(window.ccd_portal_authenticated);
 const loading = ref(true), busy = ref(false), error = ref(""), message = ref(""), boot = ref(null), unauthenticated = ref(!sessionAuthenticated), view = ref("search"), detailSection = ref("details");
-const criteria = reactive([{fieldname:"",value:""}]), results = ref([]), searchRecordCount = ref(0), searchTruncated = ref(false), searched = ref(false), searchedByRestrictedName = ref(false), selected = ref(null), samePersonGroup = ref(null), revealed = ref(null), revealSeconds = ref(0), correctionRows = ref([]), concernRows = ref([]);
+const criteria = reactive([{fieldname:"",value:""}]), results = ref([]), searchRecordCount = ref(0), searchTruncated = ref(false), searched = ref(false), searchedByRestrictedName = ref(false), serviceSummary = ref([]), serviceSummarySection = ref(null), selected = ref(null), samePersonGroup = ref(null), revealed = ref(null), revealSeconds = ref(0), correctionRows = ref([]), concernRows = ref([]);
 const showReveal = ref(false), showCorrection = ref(false), decisionRequest = ref(null), decisionReview = ref(null), concernGroup = ref(null);
 const revealForm = reactive({reason_code:"",context_note:""});
 const correctionForm = reactive({changes:{},selected:{},reason:"",centre:""});
@@ -147,13 +152,16 @@ const contactGroups = computed(() => [
 ].filter((group)=>group.fields.length));
 function inputType(fieldname) { const kind=searchFields.value.find((f)=>f.fieldname===fieldname)?.data_kind; return kind==="Date"?"date":kind==="Email"?"email":"text"; }
 function isRestrictedNameSearch(rows) { const fields=rows.map((row)=>row.fieldname); if(fields.length===1)return ["eng_firstname","chi_firstname"].includes(fields[0]); if(fields.length!==2)return false; return [["eng_firstname","eng_surname"],["chi_firstname","chi_surname"]].some((pair)=>pair.every((field)=>fields.includes(field))); }
+function serviceNames(records) { return [...new Set((records || []).map((record)=>record.service_name).filter(Boolean))]; }
+function setUniqueResultServices() { serviceSummary.value=results.value.length===1?serviceNames(results.value[0].records):[]; }
+async function loadUniqueResultServices() { setUniqueResultServices(); const records=results.value.length===1?results.value[0].records:[]; if(records.length!==1)return; try { const summary=await call("ccd_portal.api.service_summary",{record_id:records[0].id}); serviceSummary.value=[...new Set(summary.services || serviceSummary.value)]; } catch { /* Identity summary is additive; retain the direct record's service label. */ } }
 function clearReveal() { revealed.value=null; revealSeconds.value=0; if(revealTimer) clearTimeout(revealTimer); if(countdownTimer) clearInterval(countdownTimer); revealTimer=null; countdownTimer=null; }
-function clearSelected() { clearReveal(); selected.value=null; samePersonGroup.value=null; detailSection.value="details"; }
-function clearSearchResults() { results.value=[]; searchRecordCount.value=0; searchTruncated.value=false; searched.value=false; searchedByRestrictedName.value=false; }
+function clearSelected() { clearReveal(); selected.value=null; samePersonGroup.value=null; detailSection.value="details"; setUniqueResultServices(); }
+function clearSearchResults() { results.value=[]; searchRecordCount.value=0; searchTruncated.value=false; searched.value=false; searchedByRestrictedName.value=false; serviceSummary.value=[]; }
 function setError(e) { error.value=e.message || __("The request could not be completed."); unauthenticated.value=e.status===401 || (!sessionAuthenticated && e.status===403); }
-async function runSearch() { busy.value=true; error.value=""; message.value=""; clearSelected(); clearSearchResults(); const submitted=criteria.map((row)=>({...row})); try { const data=await call("ccd_portal.api.search",{criteria:submitted}); results.value=data.results; searchRecordCount.value=data.record_count; searchTruncated.value=Boolean(data.truncated); searched.value=true; searchedByRestrictedName.value=isRestrictedNameSearch(submitted); criteria.forEach((row)=>row.value=""); } catch(e){setError(e);} finally{busy.value=false;} }
-async function openDetail(id) { busy.value=true; error.value=""; clearReveal(); samePersonGroup.value=null; detailSection.value="details"; try { selected.value=await call("ccd_portal.api.detail",{record_id:id}); selected.value && window.scrollTo({top:document.body.scrollHeight,behavior:"smooth"}); } catch(e){setError(e);} finally{busy.value=false;} }
-async function showSamePerson() { if(!selected.value)return; busy.value=true; error.value=""; message.value=""; try { const data=await call("ccd_portal.api.same_person_records",{record_id:selected.value.id}); samePersonGroup.value=data.results?.find((group)=>group.records?.length>1) || null; if(!samePersonGroup.value)message.value=__("No additional accessible confirmed same-person records were found."); } catch(e){setError(e);} finally{busy.value=false;} }
+async function runSearch() { busy.value=true; error.value=""; message.value=""; clearSelected(); clearSearchResults(); const submitted=criteria.map((row)=>({...row})); try { const data=await call("ccd_portal.api.search",{criteria:submitted}); results.value=data.results; searchRecordCount.value=data.record_count; searchTruncated.value=Boolean(data.truncated); searched.value=true; searchedByRestrictedName.value=isRestrictedNameSearch(submitted); await loadUniqueResultServices(); criteria.forEach((row)=>row.value=""); } catch(e){setError(e);} finally{busy.value=false;} }
+async function openDetail(id) { busy.value=true; error.value=""; clearReveal(); samePersonGroup.value=null; detailSection.value="details"; try { selected.value=await call("ccd_portal.api.detail",{record_id:id}); serviceSummary.value=[...new Set(selected.value?.services_used || [selected.value?.service_name].filter(Boolean))]; await nextTick(); serviceSummarySection.value?.scrollIntoView({behavior:"smooth",block:"center"}); } catch(e){setError(e);} finally{busy.value=false;} }
+async function showSamePerson() { if(!selected.value)return; busy.value=true; error.value=""; message.value=""; try { const data=await call("ccd_portal.api.same_person_records",{record_id:selected.value.id}); samePersonGroup.value=data.results?.find((group)=>group.records?.length>1) || null; if(samePersonGroup.value)serviceSummary.value=serviceNames(samePersonGroup.value.records); else message.value=__("No additional accessible confirmed same-person records were found."); } catch(e){setError(e);} finally{busy.value=false;} }
 async function doReveal() { busy.value=true; error.value=""; try { revealed.value=await call("ccd_portal.api.reveal",{record_id:selected.value.id,...revealForm}); revealSeconds.value=revealed.value.expires_in; showReveal.value=false; revealForm.reason_code=""; revealForm.context_note=""; countdownTimer=setInterval(()=>revealSeconds.value=Math.max(0,revealSeconds.value-1),1000); revealTimer=setTimeout(clearReveal,revealed.value.expires_in*1000); } catch(e){setError(e);} finally{busy.value=false;} }
 function openCorrection() { correctionForm.changes={}; correctionForm.selected={}; correctionForm.reason=""; correctionForm.centre=selected.value?.centres.length===1?selected.value.centres[0]:""; showCorrection.value=true; }
 async function submitCorrection() { const changes=Object.fromEntries(Object.keys(correctionForm.selected).filter((fieldname)=>correctionForm.selected[fieldname]).map((fieldname)=>[fieldname,correctionForm.changes[fieldname] ?? ""])); busy.value=true; error.value=""; try { const response=await call("ccd_portal.api.submit_correction",{record_id:selected.value.id,changes,reason:correctionForm.reason,centre:correctionForm.centre}); showCorrection.value=false; message.value=`${__("Correction request submitted")}: ${response.request_id}`; } catch(e){setError(e);} finally{busy.value=false;} }
