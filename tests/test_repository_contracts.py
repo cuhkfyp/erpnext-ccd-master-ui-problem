@@ -44,7 +44,9 @@ class RepositoryContractTests(unittest.TestCase):
 		self.assertIn('metadata={"stage": "feature_disabled"}', api)
 		self.assertIn('v-if="canRequestCorrection"', app)
 		self.assertIn("canViewCorrections", app)
-		self.assertIn("Existing requests remain visible", panel)
+		self.assertIn("Boolean(boot.value?.correction_requests_enabled)", app)
+		self.assertGreaterEqual(api.count("_require_correction_feature("), 5)
+		self.assertIn("Existing request records are retained", panel)
 
 	def test_no_automatic_audit_retention_hook(self):
 		hooks = (ROOT / "ccd_portal" / "hooks.py").read_text(encoding="utf-8")

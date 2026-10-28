@@ -106,8 +106,8 @@
     <template v-else-if="resource === 'features'">
       <h3>{{ __('Portal features') }}</h3>
       <p class="muted">{{ __('Control optional staff actions without deleting their records or history.') }}</p>
-      <label class="check-control" style="margin-top:1rem"><input v-model="correctionRequestsEnabled" type="checkbox" /><span>{{ __('Allow new correction requests') }}</span></label>
-      <p class="muted">{{ __('When disabled, the request button is hidden and the server rejects new submissions. Existing requests remain visible for status and Data Steward review.') }}</p>
+      <label class="check-control" style="margin-top:1rem"><input v-model="correctionRequestsEnabled" type="checkbox" /><span>{{ __('Show correction workflow') }}</span></label>
+      <p class="muted">{{ __('When disabled, correction requests, My corrections, and the Data Steward correction queue are hidden and blocked. Existing request records are retained and return when the workflow is enabled again.') }}</p>
       <div class="actions"><button class="primary" :disabled="busy || correctionRequestsEnabled === portalFeatures?.correction_requests_enabled" @click="saveCorrectionFeature">{{ __('Save portal features') }}</button></div>
     </template>
 

@@ -220,6 +220,19 @@ def _same_person_state(context: PortalContext, policy: dict, settings) -> dict:
 		return {"effective": False, "policy_enabled": False, "rollout_enabled": False, "schema_ready": False}
 
 
+def _require_correction_feature(context: PortalContext, event_type: str, record_id: str | None = None):
+	settings = frappe.get_single("CCD Portal Settings")
+	if cint(getattr(settings, "correction_requests_enabled", 0)):
+		return settings
+	audit_denial(
+		event_type,
+		context=context,
+		record_id=record_id,
+		metadata={"stage": "feature_disabled"},
+	)
+	frappe.throw(_("The correction workflow is not currently available."), frappe.PermissionError)
+
+
 def _accessible_records_for_person(
 	person: dict, context: PortalContext, policy_version: str
 ) -> list[dict]:
@@ -808,15 +821,7 @@ def reveal(record_id: str, reason_code: str, context_note: str | None = None):
 def submit_correction(record_id: str, changes=None, reason: str | None = None, centre: str | None = None):
 	require_post()
 	context = _require("Correction Submitted", "Operator", "Data Steward", require_centres=True)
-	settings = frappe.get_single("CCD Portal Settings")
-	if not cint(getattr(settings, "correction_requests_enabled", 0)):
-		audit_denial(
-			"Correction Submitted",
-			context=context,
-			record_id=record_id,
-			metadata={"stage": "feature_disabled"},
-		)
-		frappe.throw(_("Correction requests are not currently available."), frappe.PermissionError)
+	_require_correction_feature(context, "Correction Submitted", record_id)
 	reason = clean_reason(reason or "")
 	changes = _json(changes, dict)
 	if not changes or len(changes) > 10:
@@ -1016,6 +1021,7 @@ def identity_concern_review_context(concern_id: str, reason: str):
 @frappe.whitelist()
 def corrections():
 	context = _require("Correction Queue Opened", "Operator", "Data Steward", require_centres=True)
+	_require_correction_feature(context, "Correction Queue Opened")
 	if context.authority == "Operator":
 		placeholders = ", ".join(["%s"] * len(context.centres))
 		rows = frappe.db.sql(
@@ -1046,7 +1052,7 @@ def corrections():
 def correction_detail(request_id: str, reason_code: str, context_note: str | None = None):
 	require_post()
 	context = _require("Correction Proposal Reveal", "Data Steward", require_centres=True)
-	settings = frappe.get_single("CCD Portal Settings")
+	settings = _require_correction_feature(context, "Correction Proposal Reveal")
 	_check_rate_limit(context, "reveal", settings.reveals_per_hour)
 	if reason_code != CORRECTION_REVIEW_REASON or not _reason_exists(reason_code):
 		audit_denial("Correction Proposal Reveal", context=context, metadata={"stage": "reason"})
@@ -1100,6 +1106,7 @@ def correction_detail(request_id: str, reason_code: str, context_note: str | Non
 def decide_correction(request_id: str, decision: str, reason: str):
 	require_post()
 	context = _require("Correction Decision", "Data Steward", require_centres=True)
+	_require_correction_feature(context, "Correction Decision")
 	reason = clean_reason(reason)
 	if decision not in {"Approve", "Reject"}:
 		frappe.throw(_("Invalid decision."), frappe.ValidationError)
