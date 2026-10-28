@@ -206,6 +206,13 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 			self.assertIn(label, desk)
 		self.assertIn("/app/ccd-master/", desk)
 		self.assertIn("The concern itself never changes identity links", desk)
+		self.assertIn('row.get("classification") == "Identity"', api)
+		self.assertIn('"comparison_fields": comparison_fields', api)
+		self.assertIn("Compare selected identity records", desk)
+		self.assertIn("Close and clear", desk)
+		self.assertIn("Different", desk)
+		self.assertIn('document.addEventListener("visibilitychange"', desk)
+		self.assertIn("not saved in the form or browser storage", desk)
 
 	def test_browser_reveal_is_record_specific_and_ephemeral(self):
 		app = (ROOT / "frontend" / "src" / "App.vue").read_text()

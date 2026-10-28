@@ -16,25 +16,87 @@ function concern_reason(title, description, action, callback) {
 }
 
 function show_review_context(data) {
-	const escape = frappe.utils.escape_html;
-	const records = (data.workflow_records || [])
-		.map((value, index) => {
-			const name = String(value.ccd_master_record || "");
+	const escape = (value) => frappe.utils.escape_html(String(value ?? ""));
+	const records = data.workflow_records || [];
+	const fields = data.comparison_fields || [];
+	const expiresIn = Number(data.expires_in || 120);
+	const recordHeaders = records
+		.map((record, index) => {
+			const name = String(record.ccd_master_record || "");
 			const route = `/app/ccd-master/${encodeURIComponent(name)}`;
-			return `<li><a href="${route}" target="_blank" rel="noopener noreferrer">${__("Record")} ${index + 1}: ${escape(name)}</a></li>`;
+			return `<th style="position:sticky;top:0;z-index:2;min-width:220px;vertical-align:top;background:var(--control-bg,#f7f7f7)">
+				<a href="${route}" target="_blank" rel="noopener noreferrer">${__("Record")} ${index + 1}: ${escape(name)}</a>
+				<div class="text-muted" style="font-weight:normal;margin-top:.25rem">${escape(record.service_name || __("Service not specified"))}</div>
+			</th>`;
 		})
 		.join("");
-	const dialog = frappe.msgprint({
-		title: __("Review selected identity records"),
-		message: `
-			<p>${__("Open and compare every selected CCD Master record using the links below.")}</p>
-			<ol>${records}</ol>
-			<p><strong>${__("If the existing link is correct:")}</strong> ${__("return here and choose Dismiss — link is correct.")}</p>
-			<p><strong>${__("If the link is wrong:")}</strong> ${__("complete the governed identity correction, split, or revalidation workflow first; then return here and choose Resolve — correction completed.")}</p>
-			<p class="text-muted">${__("The concern itself never changes identity links. This temporary context closes automatically and is not saved in the form.")}</p>`,
-		wide: true,
+	const fieldRows = fields
+		.map((field) => {
+			const cells = records
+				.map((record) => {
+					const raw = record.values?.[field.fieldname];
+					const display = raw === null || raw === undefined || raw === "" ? "—" : raw;
+					return `<td style="white-space:pre-wrap;overflow-wrap:anywhere">${escape(display)}</td>`;
+				})
+				.join("");
+			const difference = field.different
+				? `<span class="indicator-pill orange" style="margin-left:.35rem">${__("Different")}</span>`
+				: "";
+			const background = field.different
+				? "background:var(--yellow-50,#fff8dd);"
+				: "background:var(--card-bg,#fff);";
+			return `<tr style="${background}">
+				<th style="position:sticky;left:0;z-index:1;min-width:190px;${background}">${escape(field.label)}${difference}</th>
+				${cells}
+			</tr>`;
+		})
+		.join("");
+	const comparison = records.length && fields.length
+		? `<div style="overflow:auto;max-height:58vh;border:1px solid var(--border-color);border-radius:6px">
+			<table class="table table-bordered" style="margin:0;min-width:${190 + records.length * 220}px">
+				<thead><tr>
+					<th style="position:sticky;left:0;top:0;z-index:3;min-width:190px;background:var(--control-bg,#f7f7f7)">${__("Identity field")}</th>
+					${recordHeaders}
+				</tr></thead>
+				<tbody>${fieldRows}</tbody>
+			</table>
+		</div>`
+		: `<p class="text-muted">${__("No current policy-approved identity fields are available for comparison.")}</p>`;
+	const reportedReason = data.reason
+		? `<p><strong>${__("Reported concern:")}</strong> ${escape(data.reason)}</p>`
+		: "";
+	const html = `
+		<div data-identity-review-context>
+			<p class="alert alert-warning">${__("Sensitive identity values are temporarily revealed for this audited review and will clear automatically in")} ${expiresIn} ${__("seconds.")}</p>
+			${reportedReason}
+			${comparison}
+			<p style="margin-top:1rem"><strong>${__("If the existing link is correct:")}</strong> ${__("close this comparison and choose Dismiss — link is correct.")}</p>
+			<p><strong>${__("If the link is wrong:")}</strong> ${__("complete the governed identity correction, split, or revalidation workflow first; then choose Resolve — correction completed.")}</p>
+			<p class="text-muted">${__("Highlighted rows contain different values. The concern itself never changes identity links, and these values are not saved in the form or browser storage.")}</p>
+		</div>`;
+	let timeout;
+	const dialog = new frappe.ui.Dialog({
+		title: __("Compare selected identity records"),
+		size: "extra-large",
+		fields: [{ fieldname: "comparison", fieldtype: "HTML", options: html }],
+		primary_action_label: __("Close and clear"),
+		primary_action() {
+			dialog.hide();
+		},
 	});
-	setTimeout(() => dialog?.hide(), Number(data.expires_in || 120) * 1000);
+	const wrapper = dialog.get_field("comparison").$wrapper;
+	dialog.$wrapper.find(".modal-dialog").css("max-width", "95vw");
+	const hideWhenTabIsHidden = () => {
+		if (document.hidden) dialog.hide();
+	};
+	document.addEventListener("visibilitychange", hideWhenTabIsHidden);
+	dialog.$wrapper.one("hidden.bs.modal", () => {
+		clearTimeout(timeout);
+		wrapper.empty();
+		document.removeEventListener("visibilitychange", hideWhenTabIsHidden);
+	});
+	dialog.show();
+	timeout = setTimeout(() => dialog.hide(), expiresIn * 1000);
 }
 
 function reveal_review_context(frm, supplied_reason) {
@@ -44,7 +106,7 @@ function reveal_review_context(frm, supplied_reason) {
 			type: "POST",
 			args: { concern_id: frm.doc.name, reason },
 			freeze: true,
-			freeze_message: __("Preparing temporary review links…"),
+			freeze_message: __("Preparing the temporary comparison…"),
 			callback(response) {
 				show_review_context(response.message || {});
 			},
@@ -56,8 +118,8 @@ function reveal_review_context(frm, supplied_reason) {
 	}
 	concern_reason(
 		__("Review selected records"),
-		__("Explain why you need temporary access to the selected CCD Master records."),
-		__("Reveal links"),
+		__("Explain why you need a temporary side-by-side comparison of the selected CCD Master records."),
+		__("Reveal comparison"),
 		(values) => reveal(values.reason)
 	);
 }
@@ -86,7 +148,7 @@ frappe.ui.form.on("CCD Portal Identity Concern", {
 
 		if (frm.doc.status === "Submitted") {
 			frm.set_intro(
-				__("Start review to obtain temporary links to all selected records. The concern does not change identity links."),
+				__("Start review to compare all selected records side by side. The concern does not change identity links."),
 				"orange"
 			);
 			frm.add_custom_button(__("Start review"), () => {

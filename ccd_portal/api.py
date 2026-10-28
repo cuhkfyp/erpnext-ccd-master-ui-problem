@@ -213,6 +213,18 @@ def _person_fields(person: dict | None, *, revealed: bool = False) -> list[dict]
 	]
 
 
+def _identity_review_fields(field_policies: list[dict]) -> list[dict]:
+	"""Return current policy-governed CCD identity fields for temporary review."""
+	meta = frappe.get_meta("CCD Master")
+	return [
+		row
+		for row in field_policies
+		if (row.get("source") or "CCD Master") == "CCD Master"
+		and row.get("classification") == "Identity"
+		and meta.has_field(row.get("fieldname"))
+	]
+
+
 def _same_person_state(context: PortalContext, policy: dict, settings) -> dict:
 	try:
 		return feature_state(policy, settings, context)
@@ -1009,47 +1021,107 @@ def identity_concern_review_context(concern_id: str, reason: str):
 	reason = clean_reason(reason)
 	settings = frappe.get_single("CCD Portal Settings")
 	_check_rate_limit(context, "identity-concern-review", settings.reveals_per_hour)
-	row = frappe.db.get_value(
+	concern = frappe.db.get_value(
 		"CCD Portal Identity Concern",
 		concern_id,
 		["name", "status", "encrypted_context"],
 		as_dict=True,
 	)
-	if not row:
+	if not concern:
 		audit_denial("Identity Concern Review Context", context=context)
 		frappe.throw(_("You are not permitted to perform this action."), frappe.PermissionError)
 	try:
-		payload = json.loads(decrypt(row.encrypted_context))
+		payload = json.loads(decrypt(concern.encrypted_context))
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), "CCD Portal concern decryption failure")
 		frappe.throw(_("The concern context is unavailable."), frappe.ValidationError)
 	record_ids = [str(value) for value in payload.get("record_ids", []) if str(value)]
 	workflow_records = []
+	comparison_fields = []
 	if record_ids:
 		placeholders = ", ".join(["%s"] * len(record_ids))
-		workflow_records = frappe.db.sql(
+		rows = frappe.db.sql(
 			f"""
-			SELECT r.portal_record_id, r.ccd_master_record
+			SELECT r.portal_record_id, r.ccd_master_record,
+			       NULLIF(TRIM(c.service_name), '') AS record_service_name,
+			       NULLIF(TRIM(registration.service_name), '') AS registration_service_name,
+			       r.source_registration AS fallback_service_source
 			  FROM `tabCCD Portal Record` r
 			  JOIN `tabCCD Master` c ON c.name = r.ccd_master_record
+			  LEFT JOIN `tabCCD Portal Source Profile` profile
+			    ON profile.canonical_source_id = r.source_registration
+			  LEFT JOIN `tabCCD Registration` registration
+			    ON registration.name = profile.source_registration
 			 WHERE r.portal_record_id IN ({placeholders})
 			 ORDER BY r.portal_record_id
 			""",
 			record_ids,
 			as_dict=True,
 		)
+		_, field_policies = get_active_policy()
+		identity_fields = _identity_review_fields(field_policies)
+		fieldnames = [row["fieldname"] for row in identity_fields]
+		master_values = (
+			{
+				str(value.name): dict(value)
+				for value in frappe.get_all(
+					"CCD Master",
+					filters={"name": ["in", [value.ccd_master_record for value in rows]]},
+					fields=["name", *fieldnames],
+					limit_page_length=len(rows),
+				)
+			}
+			if rows
+			else {}
+		)
+		service_name_fallback = (
+			getattr(settings, "service_name_fallback", None) or SERVICE_FALLBACK_UNSPECIFIED
+		)
+		for source_row in rows:
+			values = master_values.get(str(source_row.ccd_master_record), {})
+			workflow_records.append(
+				{
+					"ccd_master_record": source_row.ccd_master_record,
+					"service_name": resolve_service_name(
+						source_row.record_service_name,
+						source_row.registration_service_name,
+						source_row.fallback_service_source,
+						service_name_fallback,
+					),
+					"values": {
+						fieldname: str(values.get(fieldname) or "") for fieldname in fieldnames
+					},
+				}
+			)
+		comparison_fields = [
+			{
+				"fieldname": row["fieldname"],
+				"label": row["label"],
+				"different": len(
+					{record["values"].get(row["fieldname"], "") for record in workflow_records}
+				)
+				> 1,
+			}
+			for row in identity_fields
+		]
 	write_event(
 		"Identity Concern Review Context",
 		context=context,
 		protected_value=reason,
-		metadata={"concern": row.name, "status": row.status},
+		metadata={
+			"concern": concern.name,
+			"status": concern.status,
+			"record_count": len(workflow_records),
+			"fields": [field["fieldname"] for field in comparison_fields],
+		},
 	)
 	return {
-		"concern_id": row.name,
-		"status": row.status,
+		"concern_id": concern.name,
+		"status": concern.status,
 		"reason": payload.get("reason", ""),
 		"record_ids": record_ids,
-		"workflow_records": [dict(record) for record in workflow_records],
+		"workflow_records": workflow_records,
+		"comparison_fields": comparison_fields,
 		"expires_in": cint(settings.reveal_ttl_seconds) or 120,
 	}
 
