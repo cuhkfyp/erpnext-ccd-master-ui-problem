@@ -20,6 +20,7 @@ def after_install() -> None:
 	settings.enabled = 0
 	settings.correction_requests_enabled = 0
 	settings.identity_concerns_enabled = 1
+	settings.centre_labels_enabled = 1
 	settings.administrator_preview = 1
 	settings.searches_per_hour = 60
 	settings.chinese_first_name_searches_per_hour = 10

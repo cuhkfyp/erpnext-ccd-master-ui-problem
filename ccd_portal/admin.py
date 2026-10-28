@@ -847,19 +847,30 @@ def get_portal_features():
 		"identity_concerns_enabled": bool(
 			cint(getattr(settings, "identity_concerns_enabled", 1))
 		),
+		"centre_labels_enabled": bool(
+			cint(getattr(settings, "centre_labels_enabled", 1))
+		),
 	}
 	write_event("Portal Features Read", context=context, metadata=result)
 	return result
 
 
 @frappe.whitelist()
-def set_portal_features(correction_requests_enabled: int, identity_concerns_enabled: int):
+def set_portal_features(
+	correction_requests_enabled: int,
+	identity_concerns_enabled: int,
+	centre_labels_enabled=None,
+):
 	"""Atomically control optional staff workflows without deleting their records."""
 	require_post()
 	context = _administrator_context("Portal Feature Change")
+	if centre_labels_enabled is None:
+		settings = frappe.get_single("CCD Portal Settings")
+		centre_labels_enabled = getattr(settings, "centre_labels_enabled", 1)
 	result = {
 		"correction_requests_enabled": bool(cint(correction_requests_enabled)),
 		"identity_concerns_enabled": bool(cint(identity_concerns_enabled)),
+		"centre_labels_enabled": bool(cint(centre_labels_enabled)),
 	}
 	frappe.db.set_single_value(
 		"CCD Portal Settings",
@@ -870,6 +881,11 @@ def set_portal_features(correction_requests_enabled: int, identity_concerns_enab
 		"CCD Portal Settings",
 		"identity_concerns_enabled",
 		int(result["identity_concerns_enabled"]),
+	)
+	frappe.db.set_single_value(
+		"CCD Portal Settings",
+		"centre_labels_enabled",
+		int(result["centre_labels_enabled"]),
 	)
 	write_event("Portal Feature Change", context=context, metadata={"features": result})
 	return result

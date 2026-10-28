@@ -1,10 +1,11 @@
 {
  "doctype":"DocType","name":"CCD Portal Settings","module":"CCD Portal","issingle":1,
- "field_order":["enabled","correction_requests_enabled","identity_concerns_enabled","administrator_preview","preview_users","same_person_enabled","same_person_pilot_users","service_name_fallback","searches_per_hour","chinese_first_name_searches_per_hour","reveals_per_hour","concerns_per_hour","reveal_ttl_seconds"],
+ "field_order":["enabled","correction_requests_enabled","identity_concerns_enabled","centre_labels_enabled","administrator_preview","preview_users","same_person_enabled","same_person_pilot_users","service_name_fallback","searches_per_hour","chinese_first_name_searches_per_hour","reveals_per_hour","concerns_per_hour","reveal_ttl_seconds"],
  "fields":[
   {"fieldname":"enabled","fieldtype":"Check","label":"Enabled","default":"0"},
   {"fieldname":"correction_requests_enabled","fieldtype":"Check","label":"Correction Workflow Enabled","default":"0","description":"Controls the complete staff-portal correction workflow. Existing request records are retained while it is disabled."},
   {"fieldname":"identity_concerns_enabled","fieldtype":"Check","label":"Identity Concerns Enabled","default":"1","description":"Controls suspected-wrong-link reporting and the reporter's My identity concerns view. Existing concern records remain available to qualified Desk reviewers."},
+  {"fieldname":"centre_labels_enabled","fieldtype":"Check","label":"Centre Labels Enabled","default":"1","description":"Controls centre-code labels on staff-portal client records. Centre authorization remains enforced when labels are hidden."},
   {"fieldname":"administrator_preview","fieldtype":"Check","label":"Administrator Preview","default":"1","read_only":1},
   {"fieldname":"preview_users","fieldtype":"Table","label":"Preview Users","options":"CCD Portal Pilot User","description":"Environment-owned named administrators only; never export this table."},
   {"fieldname":"same_person_enabled","fieldtype":"Check","label":"Global Same-Person Enabled","default":"0","description":"Independent environment-owned V2 rollout gate. System Manager activation requires a reason."},

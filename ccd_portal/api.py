@@ -630,6 +630,9 @@ def bootstrap():
 		"identity_concerns_enabled": bool(
 			cint(getattr(settings, "identity_concerns_enabled", 1))
 		),
+		"show_centre_labels": bool(
+			cint(getattr(settings, "centre_labels_enabled", 1))
+		),
 		"reveal_ttl_seconds": cint(settings.reveal_ttl_seconds) or 120,
 		"is_access_administrator": context.authority == "Access Administrator",
 		"can_activate_policy": context.authority == "Access Administrator"

@@ -41,6 +41,7 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		self.assertIn("ensure_settings_defaults()", admin)
 		self.assertIn("backfill_settings_defaults", patches)
 		self.assertIn("enable_identity_concerns_on_upgrade", patches)
+		self.assertIn("enable_centre_labels_on_upgrade", patches)
 
 	def test_v2_policy_virtual_field_is_fixed_and_not_correctable(self):
 		policy = json.loads((DOCTYPE_ROOT / "ccd_portal_policy" / "ccd_portal_policy.json").read_text())
