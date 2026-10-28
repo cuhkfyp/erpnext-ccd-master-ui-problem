@@ -4,6 +4,12 @@ import frappe
 from frappe import _
 from frappe.utils import cint, now_datetime
 
+from ccd_portal.appearance import (
+	PORTAL_APPEARANCE_DEFAULTS,
+	PORTAL_APPEARANCE_FIELDS,
+	portal_appearance,
+	validate_portal_appearance,
+)
 from ccd_portal.audit import audit_denial, write_event
 from ccd_portal.identity import identity_coverage, schema_status
 from ccd_portal.indexing import coverage_report, refresh_source
@@ -889,6 +895,34 @@ def set_portal_features(
 	)
 	write_event("Portal Feature Change", context=context, metadata={"features": result})
 	return result
+
+
+@frappe.whitelist()
+def get_portal_appearance():
+	context = _administrator_context("Portal Appearance Read")
+	result = portal_appearance(frappe.get_single("CCD Portal Settings"))
+	write_event("Portal Appearance Read", context=context, metadata={"appearance": result})
+	return {"appearance": result, "defaults": dict(PORTAL_APPEARANCE_DEFAULTS)}
+
+
+@frappe.whitelist()
+def set_portal_appearance(appearance=None):
+	"""Validate and audit the environment-owned staff portal palette."""
+	require_post()
+	context = _administrator_context("Portal Appearance Change")
+	if isinstance(appearance, str):
+		appearance = frappe.parse_json(appearance)
+	try:
+		result = validate_portal_appearance(appearance)
+	except ValueError:
+		frappe.throw(
+			_("Select a valid six-digit colour for every portal area."),
+			frappe.ValidationError,
+		)
+	for key, value in result.items():
+		frappe.db.set_single_value("CCD Portal Settings", PORTAL_APPEARANCE_FIELDS[key], value)
+	write_event("Portal Appearance Change", context=context, metadata={"appearance": result})
+	return {"appearance": result, "defaults": dict(PORTAL_APPEARANCE_DEFAULTS)}
 
 
 @frappe.whitelist()

@@ -2,6 +2,7 @@ import frappe
 from frappe.installer import update_site_config
 from frappe.utils import cint
 
+from ccd_portal.appearance import PORTAL_APPEARANCE_DEFAULTS, PORTAL_APPEARANCE_FIELDS, is_hex_color
 from ccd_portal.primitives import SERVICE_FALLBACK_UNSPECIFIED, SERVICE_NAME_FALLBACKS
 
 
@@ -21,6 +22,8 @@ def after_install() -> None:
 	settings.correction_requests_enabled = 0
 	settings.identity_concerns_enabled = 1
 	settings.centre_labels_enabled = 1
+	for key, default in PORTAL_APPEARANCE_DEFAULTS.items():
+		setattr(settings, PORTAL_APPEARANCE_FIELDS[key], default)
 	settings.administrator_preview = 1
 	settings.searches_per_hour = 60
 	settings.chinese_first_name_searches_per_hour = 10
@@ -54,6 +57,12 @@ def ensure_settings_defaults() -> dict:
 	if identity_concerns_enabled is None:
 		frappe.db.set_single_value("CCD Portal Settings", "identity_concerns_enabled", 1)
 		updated.append("identity_concerns_enabled")
+	for key, default in PORTAL_APPEARANCE_DEFAULTS.items():
+		fieldname = PORTAL_APPEARANCE_FIELDS[key]
+		value = frappe.db.get_single_value("CCD Portal Settings", fieldname)
+		if not is_hex_color(value):
+			frappe.db.set_single_value("CCD Portal Settings", fieldname, default)
+			updated.append(fieldname)
 	service_fallback = frappe.db.get_single_value("CCD Portal Settings", "service_name_fallback")
 	if service_fallback not in SERVICE_NAME_FALLBACKS:
 		frappe.db.set_single_value(

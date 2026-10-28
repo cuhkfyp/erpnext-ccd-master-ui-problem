@@ -65,6 +65,38 @@ class RepositoryContractTests(unittest.TestCase):
 		audit = (ROOT / "ccd_portal" / "audit.py").read_text(encoding="utf-8")
 		self.assertIn("frappe.db.commit()", audit)
 
+	def test_portal_appearance_is_admin_controlled_validated_and_resettable(self):
+		settings = json.loads(
+			(ROOT / "ccd_portal" / "ccd_portal" / "doctype" / "ccd_portal_settings" / "ccd_portal_settings.json").read_text()
+		)
+		fields = {field["fieldname"]: field for field in settings["fields"]}
+		expected = {
+			"appearance_header_color": "#163D2A",
+			"appearance_primary_color": "#1D5A3C",
+			"appearance_page_color": "#F5F7F6",
+			"appearance_page_accent_color": "#E3F0E8",
+			"appearance_card_color": "#FFFFFF",
+			"appearance_highlight_color": "#F4FAF6",
+			"appearance_label_color": "#E8F1EB",
+		}
+		for fieldname, default in expected.items():
+			self.assertEqual(fields[fieldname]["default"], default)
+		appearance = (ROOT / "ccd_portal" / "appearance.py").read_text()
+		admin = (ROOT / "ccd_portal" / "admin.py").read_text()
+		api = (ROOT / "ccd_portal" / "api.py").read_text()
+		panel = (ROOT / "frontend" / "src" / "components" / "AdminPanel.vue").read_text()
+		theme = (ROOT / "frontend" / "src" / "theme.js").read_text()
+		style = (ROOT / "frontend" / "src" / "style.css").read_text()
+		self.assertIn('re.compile(r"^#[0-9A-Fa-f]{6}$")', appearance)
+		self.assertIn("def set_portal_appearance(appearance=None)", admin)
+		self.assertIn('"Portal Appearance Change"', admin)
+		self.assertIn('"appearance": portal_appearance(settings)', api)
+		self.assertIn('type="color"', panel)
+		self.assertIn("Restore current default colours", panel)
+		self.assertIn("applyPortalTheme", theme)
+		self.assertIn("readableText", theme)
+		self.assertIn("--portal-header", style)
+
 	def test_app_permission_hook_resolves_to_security_module(self):
 		hooks = (ROOT / "ccd_portal" / "hooks.py").read_text(encoding="utf-8")
 		self.assertIn('"has_permission": "ccd_portal.security.has_portal_permission"', hooks)

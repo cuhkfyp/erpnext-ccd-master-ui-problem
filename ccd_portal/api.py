@@ -8,6 +8,7 @@ from frappe import _
 from frappe.utils import cint, now_datetime, nowdate
 from frappe.utils.password import decrypt, encrypt
 
+from ccd_portal.appearance import portal_appearance
 from ccd_portal.audit import audit_denial, write_event
 from ccd_portal.identity import (
 	feature_state,
@@ -633,6 +634,7 @@ def bootstrap():
 		"show_centre_labels": bool(
 			cint(getattr(settings, "centre_labels_enabled", 1))
 		),
+		"appearance": portal_appearance(settings),
 		"reveal_ttl_seconds": cint(settings.reveal_ttl_seconds) or 120,
 		"is_access_administrator": context.authority == "Access Administrator",
 		"can_activate_policy": context.authority == "Access Administrator"

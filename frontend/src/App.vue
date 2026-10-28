@@ -122,6 +122,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { call } from "./api";
 import AdminPanel from "./components/AdminPanel.vue";
+import { applyPortalTheme } from "./theme";
 
 const __ = (text) => text;
 const sessionAuthenticated = Boolean(window.ccd_portal_authenticated);
@@ -179,6 +180,6 @@ function closeDecision() { decisionRequest.value=null; decisionReview.value=null
 async function loadCorrectionReview() { busy.value=true; error.value=""; try { decisionReview.value=await call("ccd_portal.api.correction_detail",{request_id:decisionRequest.value.name,...reviewForm}); reviewTimer=setTimeout(closeDecision,decisionReview.value.expires_in*1000); } catch(e){setError(e);} finally{busy.value=false;} }
 async function submitDecision() { if(!decisionReview.value)return; busy.value=true; error.value=""; try { await call("ccd_portal.api.decide_correction",{request_id:decisionRequest.value.name,...decisionForm}); closeDecision(); decisionForm.reason=""; message.value=__("Decision recorded and audited."); await openCorrections(); } catch(e){setError(e);} finally{busy.value=false;} }
 function visibilityChanged() { if(document.hidden) { clearReveal(); closeDecision(); } }
-onMounted(async()=>{ if(!sessionAuthenticated){loading.value=false;return;} document.addEventListener("visibilitychange",visibilityChanged); try{boot.value=await call("ccd_portal.api.bootstrap",{},false);}catch(e){setError(e);}finally{loading.value=false;} });
+onMounted(async()=>{ if(!sessionAuthenticated){loading.value=false;return;} document.addEventListener("visibilitychange",visibilityChanged); try{boot.value=await call("ccd_portal.api.bootstrap",{},false);applyPortalTheme(boot.value?.appearance);}catch(e){setError(e);}finally{loading.value=false;} });
 onBeforeUnmount(()=>{clearReveal();closeDecision();closeConcern();document.removeEventListener("visibilitychange",visibilityChanged);});
 </script>

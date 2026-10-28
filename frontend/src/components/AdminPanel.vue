@@ -8,6 +8,7 @@
       </button>
       <button class="tab" :class="{ active: resource === 'policies' }" @click="select('policies')">{{ __('Policies') }}</button>
       <button class="tab" :class="{ active: resource === 'features' }" @click="select('features')">{{ __('Portal features') }}</button>
+      <button class="tab" :class="{ active: resource === 'appearance' }" @click="select('appearance')">{{ __('Appearance') }}</button>
       <button class="tab" :class="{ active: resource === 'rollout' }" @click="select('rollout')">{{ __('Same-person rollout') }}</button>
       <button class="tab" :class="{ active: resource === 'coverage' }" @click="select('coverage')">{{ __('Coverage') }}</button>
     </div>
@@ -115,6 +116,37 @@
       <div class="actions"><button class="primary" :disabled="busy || (correctionRequestsEnabled === portalFeatures?.correction_requests_enabled && identityConcernsEnabled === portalFeatures?.identity_concerns_enabled && centreLabelsEnabled === portalFeatures?.centre_labels_enabled)" @click="savePortalFeatures">{{ __('Save portal features') }}</button></div>
     </template>
 
+    <template v-else-if="resource === 'appearance'">
+      <h3>{{ __('Portal appearance') }}</h3>
+      <p class="muted">{{ __('Choose colours visually or enter a six-digit hex value. The preview updates immediately; staff see the change only after you save and they reload the portal.') }}</p>
+      <div class="appearance-grid">
+        <div v-for="field in appearanceFields" :key="field.key" class="field colour-field">
+          <label :for="`appearance-${field.key}-text`">{{ field.label }}</label>
+          <div class="colour-inputs">
+            <input class="colour-picker" type="color" :value="pickerColour(field.key)" :aria-label="`${field.label} ${__('colour picker')}`" @input="setAppearanceColour(field.key,$event.target.value)" />
+            <input :id="`appearance-${field.key}-text`" v-model.trim="portalAppearance[field.key]" maxlength="7" pattern="#[0-9A-Fa-f]{6}" spellcheck="false" autocomplete="off" @blur="normalizeAppearanceField(field.key)" />
+          </div>
+          <small class="field-help">{{ field.help }}</small>
+        </div>
+      </div>
+      <section class="appearance-preview" aria-live="polite">
+        <div class="appearance-preview-header"><strong>{{ __('Master Staff Portal') }}</strong><span>{{ __('Preview') }}</span></div>
+        <div class="appearance-preview-body">
+          <div class="appearance-preview-card">
+            <strong>{{ __('Client search card') }}</strong>
+            <div style="margin-top:.55rem"><button type="button" class="primary">{{ __('Primary action') }}</button> <span class="pill">{{ __('Service label') }}</span></div>
+            <div class="appearance-preview-highlight"><strong>{{ __('Services used') }}</strong><div class="muted">{{ __('Highlighted information panel') }}</div></div>
+          </div>
+        </div>
+      </section>
+      <p v-if="!appearanceValid" class="error" style="margin-top:1rem">{{ __('Every value must use the format #RRGGBB, for example #761E1E.') }}</p>
+      <div class="actions">
+        <button class="primary" :disabled="busy || !appearanceValid || !appearanceChanged" @click="savePortalAppearance">{{ __('Save portal colours') }}</button>
+        <button class="secondary" :disabled="busy || appearanceIsDefault" @click="restoreDefaultAppearance">{{ __('Restore current default colours') }}</button>
+      </div>
+      <p class="muted">{{ __('Restore changes only this preview until Save portal colours is selected, so you can safely recover from an unwanted combination.') }}</p>
+    </template>
+
     <template v-else-if="resource === 'rollout'">
       <h3>{{ __('Independent same-person rollout') }}</h3>
       <p class="muted">{{ __('Pilot users and the global gate are environment-owned. Neither setting grants portal or centre access.') }}</p>
@@ -159,8 +191,9 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { call } from "../api";
+import { applyPortalTheme, DEFAULT_PORTAL_APPEARANCE, isValidThemeColor, normalizePortalAppearance } from "../theme";
 
 const __ = (text) => text;
 const { canActivatePolicy = false } = defineProps({ canActivatePolicy: Boolean });
@@ -177,13 +210,26 @@ const configs = {
   grants: { label: __("Explicit centre grants"), help: __("A grant joins one active portal profile to one canonical centre. Registration names are not centres."), columns: ["user","centre","active","effective_from","effective_to"], fields: [{name:"user",label:__("Portal user"),reference:"profiles",required:true,placeholder:__("Select a portal profile")},{name:"centre",label:__("Centre"),reference:"centres",required:true,placeholder:__("Select a canonical centre")},{name:"active",label:__("Active"),type:"check"},{name:"effective_from",label:__("From"),type:"date",help:__("Optional; blank means immediately.")},{name:"effective_to",label:__("To"),type:"date",help:__("Optional; blank means no scheduled expiry.")}] },
   reveal_reasons: { label: __("Reveal reasons"), columns: ["reason_code","label","display_order","active"], fields: [{name:"reason_code",label:__("Code")},{name:"label",label:__("Label")},{name:"display_order",label:__("Order"),type:"number"},{name:"active",label:__("Active"),type:"check"}] },
 };
-const resource = ref("centres"), rows = ref([]), policies = ref([]), coverage = ref(null), portalFeatures = ref(null), correctionRequestsEnabled = ref(false), identityConcernsEnabled = ref(true), centreLabelsEnabled = ref(true), rollout = ref(null), rolloutPilots = ref([]), rolloutServiceFallback = ref("Service not specified"), rolloutReason = ref(""), busy = ref(false), error = ref(""), message = ref(""), warning = ref(""), editing = ref(""), activationReason = ref(""), refreshReason = ref(""), viewingPolicy = ref(null), sourceRefresh = ref(null);
+const appearanceFields = [
+  {key:"header",label:__("Header"),help:__("The full-width top bar behind the portal name and signed-in user.")},
+  {key:"primary",label:__("Primary controls"),help:__("Search, reveal, save, and active navigation controls.")},
+  {key:"page",label:__("Page background"),help:__("The main area behind cards and search results.")},
+  {key:"page_accent",label:__("Background glow"),help:__("The soft colour in the upper-left page background.")},
+  {key:"card",label:__("Cards"),help:__("Search forms, results, details, and administration panels.")},
+  {key:"highlight",label:__("Highlight panels"),help:__("The Services used panel and other subtle highlighted areas.")},
+  {key:"label",label:__("Labels and secondary controls"),help:__("Service pills, centre pills, and secondary buttons.")},
+];
+const resource = ref("centres"), rows = ref([]), policies = ref([]), coverage = ref(null), portalFeatures = ref(null), correctionRequestsEnabled = ref(false), identityConcernsEnabled = ref(true), centreLabelsEnabled = ref(true), rollout = ref(null), rolloutPilots = ref([]), rolloutServiceFallback = ref("Service not specified"), rolloutReason = ref(""), busy = ref(false), error = ref(""), message = ref(""), warning = ref(""), editing = ref(""), activationReason = ref(""), refreshReason = ref(""), viewingPolicy = ref(null), sourceRefresh = ref(null), savedPortalAppearance = ref({...DEFAULT_PORTAL_APPEARANCE}), portalAppearanceDefaults = ref({...DEFAULT_PORTAL_APPEARANCE});
+const portalAppearance = reactive({...DEFAULT_PORTAL_APPEARANCE});
 let sourceRefreshMonitor = 0;
 const references = ref({centres:[],source_profiles:[],profiles:[],registrations:[],registration_columns:[],users:[],departments:[]});
 const form = reactive({});
 const policy = reactive({ name: "", version: "", title: "", same_person_enabled: false, fields: "[]" });
 const v2Clone = reactive({version:"",title:""});
 const config = computed(() => configs[resource.value]);
+const appearanceValid = computed(() => appearanceFields.every((field) => isValidThemeColor(portalAppearance[field.key])));
+const appearanceChanged = computed(() => appearanceFields.some((field) => String(portalAppearance[field.key]).toUpperCase() !== savedPortalAppearance.value[field.key]));
+const appearanceIsDefault = computed(() => appearanceFields.every((field) => String(portalAppearance[field.key]).toUpperCase() === portalAppearanceDefaults.value[field.key]));
 const clientProfileOptions = computed(() => (references.value.profiles || []).filter((option) => ["Reader","Operator","Data Steward"].includes(option.authority)));
 const visibleFields = computed(() => (config.value?.fields || []).filter((field) => !field.showWhen || Object.entries(field.showWhen).every(([key,value]) => form[key] === value)));
 const globalEnableTitle = computed(() => busy.value
@@ -207,6 +253,12 @@ function optionsFor(field) {
   }
   return references.value[field.reference] || [];
 }
+
+function assignAppearance(values) { Object.assign(portalAppearance, normalizePortalAppearance(values)); }
+function pickerColour(key) { return isValidThemeColor(portalAppearance[key]) ? portalAppearance[key] : portalAppearanceDefaults.value[key]; }
+function setAppearanceColour(key, value) { portalAppearance[key] = String(value).toUpperCase(); }
+function normalizeAppearanceField(key) { if (isValidThemeColor(portalAppearance[key])) portalAppearance[key] = String(portalAppearance[key]).toUpperCase(); }
+function restoreDefaultAppearance() { assignAppearance(portalAppearanceDefaults.value); }
 
 function reset() { editing.value = ""; Object.keys(form).forEach((key) => delete form[key]); config.value?.fields.forEach((field) => form[field.name] = field.type === "check" ? true : field.type === "multiselect" ? [] : ""); if (resource.value === "source_profiles") { form.assignment_mode = "Per-record Centre Key"; form.parser_type = "Exact"; } }
 function edit(row) { editing.value = row.name; reset(); editing.value = row.name; config.value.fields.forEach((field) => form[field.name] = field.type === "check" ? Boolean(row[field.name]) : field.type === "multiselect" ? [...(row[field.name] || [])] : (row[field.name] ?? "")); window.scrollTo({top:0,behavior:"smooth"}); }
@@ -254,8 +306,8 @@ async function monitorSourceRefresh(operationToken) {
     }
   }
 }
-async function select(value) { resource.value = value; error.value = ""; message.value = ""; warning.value = ""; viewingPolicy.value = null; reset(); await load(); }
-async function load() { busy.value = true; try { if (config.value) { rows.value = (await call("ccd_portal.admin.list_resources", {resource:resource.value}, false)).rows; const active = rows.value.find(row => row.refresh_in_progress && row.refresh_operation_token); if (active && sourceRefresh.value?.operation_token !== active.refresh_operation_token) void monitorSourceRefresh(active.refresh_operation_token); } else if (resource.value === "policies") policies.value = (await call("ccd_portal.admin.list_policies", {}, false)).policies; else if (resource.value === "features") { portalFeatures.value=await call("ccd_portal.admin.get_portal_features",{},false); correctionRequestsEnabled.value=Boolean(portalFeatures.value.correction_requests_enabled); identityConcernsEnabled.value=Boolean(portalFeatures.value.identity_concerns_enabled); centreLabelsEnabled.value=Boolean(portalFeatures.value.centre_labels_enabled); } else if (resource.value === "rollout") { rollout.value=await call("ccd_portal.admin.get_same_person_rollout",{},false); rolloutPilots.value=[...rollout.value.pilot_users]; rolloutServiceFallback.value=rollout.value.service_name_fallback || "Service not specified"; } else coverage.value = await call("ccd_portal.admin.get_coverage", {}, false); } catch (e) { error.value = e.message; } finally { busy.value = false; } }
+async function select(value) { if (resource.value === "appearance" && value !== "appearance") applyPortalTheme(savedPortalAppearance.value); resource.value = value; error.value = ""; message.value = ""; warning.value = ""; viewingPolicy.value = null; reset(); await load(); }
+async function load() { busy.value = true; try { if (config.value) { rows.value = (await call("ccd_portal.admin.list_resources", {resource:resource.value}, false)).rows; const active = rows.value.find(row => row.refresh_in_progress && row.refresh_operation_token); if (active && sourceRefresh.value?.operation_token !== active.refresh_operation_token) void monitorSourceRefresh(active.refresh_operation_token); } else if (resource.value === "policies") policies.value = (await call("ccd_portal.admin.list_policies", {}, false)).policies; else if (resource.value === "features") { portalFeatures.value=await call("ccd_portal.admin.get_portal_features",{},false); correctionRequestsEnabled.value=Boolean(portalFeatures.value.correction_requests_enabled); identityConcernsEnabled.value=Boolean(portalFeatures.value.identity_concerns_enabled); centreLabelsEnabled.value=Boolean(portalFeatures.value.centre_labels_enabled); } else if (resource.value === "appearance") { const response=await call("ccd_portal.admin.get_portal_appearance",{},false); portalAppearanceDefaults.value=normalizePortalAppearance(response.defaults); savedPortalAppearance.value=normalizePortalAppearance(response.appearance); assignAppearance(savedPortalAppearance.value); applyPortalTheme(savedPortalAppearance.value); } else if (resource.value === "rollout") { rollout.value=await call("ccd_portal.admin.get_same_person_rollout",{},false); rolloutPilots.value=[...rollout.value.pilot_users]; rolloutServiceFallback.value=rollout.value.service_name_fallback || "Service not specified"; } else coverage.value = await call("ccd_portal.admin.get_coverage", {}, false); } catch (e) { error.value = e.message; } finally { busy.value = false; } }
 async function loadReferences() { references.value = await call("ccd_portal.admin.reference_options", {}, false); }
 async function saveResource() {
   busy.value = true; error.value = ""; message.value = ""; warning.value = "";
@@ -299,10 +351,12 @@ function editPolicy(row) { viewingPolicy.value=null; policy.name=row.name; polic
 async function savePolicy() { busy.value=true; error.value=""; try { const fields=JSON.parse(policy.fields); await call("ccd_portal.admin.save_draft_policy",{policy_version:policy.version,title:policy.title,same_person_enabled:policy.same_person_enabled?1:0,fields,name:policy.name || null}); message.value=__("Draft policy saved and audited."); resetPolicy(); await load(); } catch(e) { error.value=e.message; } finally { busy.value=false; } }
 async function cloneV2() { busy.value=true; error.value=""; try { await call("ccd_portal.admin.clone_active_policy_to_v2",{policy_version:v2Clone.version,title:v2Clone.title}); v2Clone.version=""; v2Clone.title=""; message.value=__("Active policy cloned to an audited V2 draft."); await load(); } catch(e) { error.value=e.message; } finally { busy.value=false; } }
 async function savePortalFeatures() { busy.value=true; error.value=""; try { portalFeatures.value=await call("ccd_portal.admin.set_portal_features",{correction_requests_enabled:correctionRequestsEnabled.value?1:0,identity_concerns_enabled:identityConcernsEnabled.value?1:0,centre_labels_enabled:centreLabelsEnabled.value?1:0}); correctionRequestsEnabled.value=Boolean(portalFeatures.value.correction_requests_enabled); identityConcernsEnabled.value=Boolean(portalFeatures.value.identity_concerns_enabled); centreLabelsEnabled.value=Boolean(portalFeatures.value.centre_labels_enabled); message.value=__("Portal features saved and audited."); } catch(e) { error.value=e.message; } finally { busy.value=false; } }
+async function savePortalAppearance() { busy.value=true; error.value=""; try { const response=await call("ccd_portal.admin.set_portal_appearance",{appearance:{...portalAppearance}}); portalAppearanceDefaults.value=normalizePortalAppearance(response.defaults); savedPortalAppearance.value=normalizePortalAppearance(response.appearance); assignAppearance(savedPortalAppearance.value); applyPortalTheme(savedPortalAppearance.value); message.value=__("Portal colours saved and audited. Other staff will see them after reloading the portal."); } catch(e) { error.value=e.message; } finally { busy.value=false; } }
 async function savePilots() { busy.value=true; error.value=""; try { await call("ccd_portal.admin.set_same_person_pilots",{users:[...rolloutPilots.value]}); message.value=__("Same-person pilots saved and audited."); await load(); } catch(e) { error.value=e.message; } finally { busy.value=false; } }
 async function saveServiceFallback() { busy.value=true; error.value=""; try { await call("ccd_portal.admin.set_service_name_fallback",{fallback:rolloutServiceFallback.value,reason:rolloutReason.value}); rolloutReason.value=""; message.value=__("Service-name fallback saved and audited."); await load(); } catch(e) { error.value=e.message; } finally { busy.value=false; } }
 async function setGlobalRollout(enabled) { busy.value=true; error.value=""; try { await call("ccd_portal.admin.set_same_person_global",{enabled:enabled?1:0,reason:rolloutReason.value}); rolloutReason.value=""; message.value=enabled?__("Same-person search enabled globally and audited."):__("Same-person search disabled globally and audited."); await load(); } catch(e) { error.value=e.message; } finally { busy.value=false; } }
 async function activatePolicy(row) { busy.value=true; error.value=""; try { await call("ccd_portal.admin.activate_policy",{policy_name:row.name,reason:activationReason.value}); activationReason.value=""; message.value=__("Policy activated and audited. Complete a full index refresh before enabling users."); await load(); } catch(e) { error.value=e.message; } finally { busy.value=false; } }
+watch(portalAppearance, (value) => { if (resource.value === "appearance") applyPortalTheme(value); }, {deep:true});
 onMounted(async () => { reset(); busy.value=true; try { await Promise.all([loadReferences(),load()]); } catch(e) { error.value=e.message; } finally { busy.value=false; } });
-onBeforeUnmount(() => { sourceRefreshMonitor += 1; });
+onBeforeUnmount(() => { sourceRefreshMonitor += 1; applyPortalTheme(savedPortalAppearance.value); });
 </script>
