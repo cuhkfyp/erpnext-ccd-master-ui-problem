@@ -42,6 +42,7 @@ from ccd_portal.security import (
 )
 
 MAX_RESULTS = 20
+CORRECTION_REVIEW_REASON = "CORRECTION_REVIEW"
 
 
 def _json(value, expected):
@@ -757,9 +758,9 @@ def reveal(record_id: str, reason_code: str, context_note: str | None = None):
 	context = _require("PII Reveal", *REVEAL_AUTHORITIES, require_centres=True)
 	settings = frappe.get_single("CCD Portal Settings")
 	_check_rate_limit(context, "reveal", settings.reveals_per_hour)
-	if not _reason_exists(reason_code):
+	if reason_code == CORRECTION_REVIEW_REASON or not _reason_exists(reason_code):
 		audit_denial("PII Reveal", context=context, record_id=record_id, metadata={"stage": "reason"})
-		frappe.throw(_("Select an approved reveal reason."), frappe.ValidationError)
+		frappe.throw(_("Select an approved reason for revealing this record."), frappe.ValidationError)
 	try:
 		access = ensure_record_access(record_id, context)
 	except frappe.PermissionError:
@@ -1035,9 +1036,9 @@ def correction_detail(request_id: str, reason_code: str, context_note: str | Non
 	context = _require("Correction Proposal Reveal", "Data Steward", require_centres=True)
 	settings = frappe.get_single("CCD Portal Settings")
 	_check_rate_limit(context, "reveal", settings.reveals_per_hour)
-	if not _reason_exists(reason_code):
+	if reason_code != CORRECTION_REVIEW_REASON or not _reason_exists(reason_code):
 		audit_denial("Correction Proposal Reveal", context=context, metadata={"stage": "reason"})
-		frappe.throw(_("Select an approved reveal reason."), frappe.ValidationError)
+		frappe.throw(_("Correction comparisons must use the correction review purpose."), frappe.ValidationError)
 	request = frappe.db.get_value(
 		"CCD Portal Correction Request",
 		request_id,

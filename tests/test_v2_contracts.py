@@ -206,6 +206,16 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		for storage in ("localStorage", "sessionStorage", "indexedDB"):
 			self.assertNotIn(storage, app)
 
+	def test_reveal_purposes_are_scoped_to_the_action(self):
+		api = (ROOT / "ccd_portal" / "api.py").read_text()
+		app = (ROOT / "frontend" / "src" / "App.vue").read_text()
+		self.assertIn('CORRECTION_REVIEW_REASON = "CORRECTION_REVIEW"', api)
+		self.assertIn("reason_code == CORRECTION_REVIEW_REASON", api)
+		self.assertIn("reason_code != CORRECTION_REVIEW_REASON", api)
+		self.assertIn("recordRevealReasons", app)
+		self.assertIn("correctionReviewReason", app)
+		self.assertIn("Audit purpose", app)
+
 	def test_guarded_deployment_keeps_both_flags_off_and_checks_schema(self):
 		remote = (ROOT / "deployment" / "deploy_remote.sh").read_text()
 		development = (ROOT / "deployment" / "deploy_development.sh").read_text()
