@@ -98,6 +98,12 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		self.assertIn("def service_summary(record_id: str)", api)
 		self.assertIn('return {"services": _service_names(accessible, service_name_fallback)}', api)
 		self.assertIn('call("ccd_portal.api.service_summary"', app)
+		self.assertIn("def _common_person_service_names(", api)
+		self.assertIn('result["services_used"] = _common_person_service_names(', api)
+		self.assertIn("set(people) != set(record_names)", api)
+		self.assertIn("len(person_names) != 1", api)
+		self.assertIn("truncated=direct_truncated", api)
+		self.assertIn("loadUniqueResultServices(data.services_used || [])", app)
 		self.assertNotIn("document.body.scrollHeight", app)
 
 	def test_rollout_controls_distinguish_busy_from_unavailable(self):

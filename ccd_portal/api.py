@@ -253,6 +253,38 @@ def _accessible_records_for_person(
 	return accessible
 
 
+def _common_person_service_names(
+	accesses: list[dict],
+	context: PortalContext,
+	policy_version: str,
+	service_name_fallback: str,
+	*,
+	identity_effective: bool,
+	truncated: bool,
+) -> list[str]:
+	"""Return accessible service labels only when every visible match is one eligible person."""
+	if not identity_effective or truncated or not accesses:
+		return []
+	if any(access.get("policy_version") != policy_version for access in accesses):
+		return []
+	record_names = sorted({str(access["ccd_master_record"]) for access in accesses})
+	if not record_names:
+		return []
+	try:
+		people = persons_for_records(record_names)
+		if set(people) != set(record_names):
+			return []
+		person_names = {str(person["name"]) for person in people.values()}
+		if len(person_names) != 1:
+			return []
+		person = next(iter(people.values()))
+		accessible = _accessible_records_for_person(person, context, policy_version)
+		return _service_names(accessible, service_name_fallback) if accessible else []
+	except Exception:
+		# Identity integration remains additive; ambiguous or unavailable identity state shows no summary.
+		return []
+
+
 def _grouped_response(
 	direct_accesses: list[dict],
 	context: PortalContext,
@@ -502,6 +534,16 @@ def _search(context: PortalContext, criteria, *, override_reason: str | None = N
 			),
 			direct_truncated=direct_truncated,
 		)
+		if restricted_name_search:
+			result["services_used"] = _common_person_service_names(
+				direct_accesses,
+				context,
+				policy["policy_version"],
+				getattr(settings, "service_name_fallback", None)
+				or SERVICE_FALLBACK_UNSPECIFIED,
+				identity_effective=bool(state["effective"]),
+				truncated=direct_truncated,
+			)
 	write_event(
 		"Search",
 		context=context,
