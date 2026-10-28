@@ -959,18 +959,54 @@ def identity_concerns():
 	return {"concerns": [dict(row) for row in rows]}
 
 
+def _identity_reviewer_context(event_type: str) -> PortalContext:
+	user = getattr(frappe.session, "user", "Guest")
+	roles = set(frappe.get_roles(user)) if user != "Guest" else set()
+	if "System Manager" not in roles and "CCD Match Sensitive Reviewer" not in roles:
+		audit_denial(event_type)
+		frappe.throw(_("You are not permitted to perform this action."), frappe.PermissionError)
+	authority = "System Manager" if "System Manager" in roles else "CCD Match Sensitive Reviewer"
+	return PortalContext(user=user, authority=authority, centres=())
+
+
+@frappe.whitelist()
+def transition_identity_concern(concern_id: str, status: str, reason: str):
+	"""Apply one guided concern transition without changing identity state."""
+	require_post()
+	context = _identity_reviewer_context("Identity Concern Status Changed")
+	reason = clean_reason(reason)
+	status = str(status or "").strip()
+	expected_status = {"In Review": "Submitted", "Resolved": "In Review", "Dismissed": "In Review"}
+	if status not in expected_status:
+		audit_denial(
+			"Identity Concern Status Changed",
+			context=context,
+			metadata={"stage": "invalid_transition"},
+		)
+		frappe.throw(_("Select a valid concern review action."), frappe.ValidationError)
+	if not frappe.db.exists("CCD Portal Identity Concern", concern_id):
+		audit_denial("Identity Concern Status Changed", context=context)
+		frappe.throw(_("You are not permitted to perform this action."), frappe.PermissionError)
+	doc = frappe.get_doc("CCD Portal Identity Concern", concern_id)
+	if doc.status != expected_status[status]:
+		audit_denial(
+			"Identity Concern Status Changed",
+			context=context,
+			metadata={"stage": "stale_transition", "requested_status": status},
+		)
+		frappe.throw(_("Refresh the concern and use the action available for its current status."), frappe.ValidationError)
+	doc.status = status
+	doc.review_reason = reason
+	doc.save(ignore_permissions=True)
+	return {"concern_id": doc.name, "status": doc.status}
+
+
 @frappe.whitelist()
 def identity_concern_review_context(concern_id: str, reason: str):
 	"""Reasoned, temporary Desk access for qualified identity reviewers."""
 	require_post()
-	user = getattr(frappe.session, "user", "Guest")
-	roles = set(frappe.get_roles(user)) if user != "Guest" else set()
-	if "System Manager" not in roles and "CCD Match Sensitive Reviewer" not in roles:
-		audit_denial("Identity Concern Review Context")
-		frappe.throw(_("You are not permitted to perform this action."), frappe.PermissionError)
+	context = _identity_reviewer_context("Identity Concern Review Context")
 	reason = clean_reason(reason)
-	authority = "System Manager" if "System Manager" in roles else "CCD Match Sensitive Reviewer"
-	context = PortalContext(user=user, authority=authority, centres=())
 	settings = frappe.get_single("CCD Portal Settings")
 	_check_rate_limit(context, "identity-concern-review", settings.reveals_per_hour)
 	row = frappe.db.get_value(

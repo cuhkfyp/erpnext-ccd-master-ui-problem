@@ -182,6 +182,7 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 
 	def test_concern_queue_encrypts_context_and_limits_reporter_visibility(self):
 		api = (ROOT / "ccd_portal" / "api.py").read_text()
+		desk = (ROOT / "ccd_portal" / "public" / "js" / "ccd_portal_identity_concern.js").read_text()
 		concern = json.loads(
 			(DOCTYPE_ROOT / "ccd_portal_identity_concern" / "ccd_portal_identity_concern.json").read_text()
 		)
@@ -192,6 +193,19 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		self.assertIn('"encrypted_context": encrypt(', api)
 		self.assertIn('filters={"reporter": context.user}', api)
 		self.assertIn('"CCD Match Sensitive Reviewer"', json.dumps(concern))
+		self.assertTrue(fields["status"]["read_only"])
+		self.assertTrue(fields["review_reason"]["read_only"])
+		self.assertIn("def transition_identity_concern(", api)
+		self.assertIn('expected_status = {"In Review": "Submitted", "Resolved": "In Review", "Dismissed": "In Review"}', api)
+		for label in (
+			"Start review",
+			"Review selected records",
+			"Dismiss — link is correct",
+			"Resolve — correction completed",
+		):
+			self.assertIn(label, desk)
+		self.assertIn("/app/ccd-master/", desk)
+		self.assertIn("The concern itself never changes identity links", desk)
 
 	def test_browser_reveal_is_record_specific_and_ephemeral(self):
 		app = (ROOT / "frontend" / "src" / "App.vue").read_text()
