@@ -837,6 +837,34 @@ def get_same_person_rollout():
 
 
 @frappe.whitelist()
+def get_portal_features():
+	context = _administrator_context("Portal Features Read")
+	settings = frappe.get_single("CCD Portal Settings")
+	result = {
+		"correction_requests_enabled": bool(
+			cint(getattr(settings, "correction_requests_enabled", 0))
+		),
+	}
+	write_event("Portal Features Read", context=context, metadata=result)
+	return result
+
+
+@frappe.whitelist()
+def set_correction_requests_enabled(enabled: int):
+	"""Control new portal correction submissions without hiding existing requests."""
+	require_post()
+	context = _administrator_context("Portal Feature Change")
+	enabled = bool(cint(enabled))
+	frappe.db.set_single_value("CCD Portal Settings", "correction_requests_enabled", int(enabled))
+	write_event(
+		"Portal Feature Change",
+		context=context,
+		metadata={"feature": "correction_requests", "enabled": enabled},
+	)
+	return {"correction_requests_enabled": enabled}
+
+
+@frappe.whitelist()
 def set_same_person_pilots(users=None):
 	require_post()
 	context = _administrator_context("Same Person Pilot Change")

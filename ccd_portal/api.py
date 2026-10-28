@@ -583,6 +583,9 @@ def bootstrap():
 		"centres": list(context.centres),
 		"feature_enabled": bool(settings.enabled),
 		"preview_mode": not bool(settings.enabled),
+		"correction_requests_enabled": bool(
+			cint(getattr(settings, "correction_requests_enabled", 0))
+		),
 		"reveal_ttl_seconds": cint(settings.reveal_ttl_seconds) or 120,
 		"is_access_administrator": context.authority == "Access Administrator",
 		"can_activate_policy": context.authority == "Access Administrator"
@@ -805,6 +808,15 @@ def reveal(record_id: str, reason_code: str, context_note: str | None = None):
 def submit_correction(record_id: str, changes=None, reason: str | None = None, centre: str | None = None):
 	require_post()
 	context = _require("Correction Submitted", "Operator", "Data Steward", require_centres=True)
+	settings = frappe.get_single("CCD Portal Settings")
+	if not cint(getattr(settings, "correction_requests_enabled", 0)):
+		audit_denial(
+			"Correction Submitted",
+			context=context,
+			record_id=record_id,
+			metadata={"stage": "feature_disabled"},
+		)
+		frappe.throw(_("Correction requests are not currently available."), frappe.PermissionError)
 	reason = clean_reason(reason or "")
 	changes = _json(changes, dict)
 	if not changes or len(changes) > 10:

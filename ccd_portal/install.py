@@ -18,6 +18,7 @@ def after_install() -> None:
 	ensure_external_schema()
 	settings = frappe.get_single("CCD Portal Settings")
 	settings.enabled = 0
+	settings.correction_requests_enabled = 0
 	settings.administrator_preview = 1
 	settings.searches_per_hour = 60
 	settings.chinese_first_name_searches_per_hour = 10

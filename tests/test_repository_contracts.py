@@ -29,6 +29,23 @@ class RepositoryContractTests(unittest.TestCase):
 		enabled = next(field for field in settings["fields"] if field["fieldname"] == "enabled")
 		self.assertEqual(enabled["default"], "0")
 
+	def test_correction_request_feature_is_admin_controlled_and_defaults_off(self):
+		settings = json.loads(
+			(ROOT / "ccd_portal" / "ccd_portal" / "doctype" / "ccd_portal_settings" / "ccd_portal_settings.json").read_text()
+		)
+		fields = {field["fieldname"]: field for field in settings["fields"]}
+		self.assertEqual(fields["correction_requests_enabled"]["default"], "0")
+		admin = (ROOT / "ccd_portal" / "admin.py").read_text()
+		api = (ROOT / "ccd_portal" / "api.py").read_text()
+		app = (ROOT / "frontend" / "src" / "App.vue").read_text()
+		panel = (ROOT / "frontend" / "src" / "components" / "AdminPanel.vue").read_text()
+		self.assertIn("def set_correction_requests_enabled(enabled: int)", admin)
+		self.assertIn('"Portal Feature Change"', admin)
+		self.assertIn('metadata={"stage": "feature_disabled"}', api)
+		self.assertIn('v-if="canRequestCorrection"', app)
+		self.assertIn("canViewCorrections", app)
+		self.assertIn("Existing requests remain visible", panel)
+
 	def test_no_automatic_audit_retention_hook(self):
 		hooks = (ROOT / "ccd_portal" / "hooks.py").read_text(encoding="utf-8")
 		self.assertNotIn("default_log_clearing_doctypes", hooks)

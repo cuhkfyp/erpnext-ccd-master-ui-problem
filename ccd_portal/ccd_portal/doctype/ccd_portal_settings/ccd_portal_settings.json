@@ -1,8 +1,9 @@
 {
  "doctype":"DocType","name":"CCD Portal Settings","module":"CCD Portal","issingle":1,
- "field_order":["enabled","administrator_preview","preview_users","same_person_enabled","same_person_pilot_users","service_name_fallback","searches_per_hour","chinese_first_name_searches_per_hour","reveals_per_hour","concerns_per_hour","reveal_ttl_seconds"],
+ "field_order":["enabled","correction_requests_enabled","administrator_preview","preview_users","same_person_enabled","same_person_pilot_users","service_name_fallback","searches_per_hour","chinese_first_name_searches_per_hour","reveals_per_hour","concerns_per_hour","reveal_ttl_seconds"],
  "fields":[
   {"fieldname":"enabled","fieldtype":"Check","label":"Enabled","default":"0"},
+  {"fieldname":"correction_requests_enabled","fieldtype":"Check","label":"Correction Requests Enabled","default":"0","description":"Controls new correction requests in the staff portal. Existing requests remain available for status and review."},
   {"fieldname":"administrator_preview","fieldtype":"Check","label":"Administrator Preview","default":"1","read_only":1},
   {"fieldname":"preview_users","fieldtype":"Table","label":"Preview Users","options":"CCD Portal Pilot User","description":"Environment-owned named administrators only; never export this table."},
   {"fieldname":"same_person_enabled","fieldtype":"Check","label":"Global Same-Person Enabled","default":"0","description":"Independent environment-owned V2 rollout gate. System Manager activation requires a reason."},
