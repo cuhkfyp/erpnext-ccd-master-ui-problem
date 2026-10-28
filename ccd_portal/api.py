@@ -292,6 +292,7 @@ def _grouped_response(
 	*,
 	policy_version: str,
 	expand: bool,
+	group_direct_matches: bool = False,
 	service_name_fallback: str = SERVICE_FALLBACK_UNSPECIFIED,
 	direct_truncated: bool = False,
 ) -> dict:
@@ -306,7 +307,7 @@ def _grouped_response(
 	direct_order = [row["portal_record_id"] for row in direct_accesses]
 	direct_ids = set(direct_order)
 	person_by_record: dict[str, dict] = {}
-	if expand:
+	if expand or group_direct_matches:
 		try:
 			current_accesses = [
 				access for access in direct_accesses if access.get("policy_version") == policy_version
@@ -334,7 +335,9 @@ def _grouped_response(
 			group = {
 				"person_id": opaque_person_id(person["name"] if person else f"record:{record_id}"),
 				"relationship_label": "",
-				"person_fields": _person_fields(person),
+				# Weak-name results may group confirmed direct matches, but do not expose
+				# the person number until a normal detail/expansion path is used.
+				"person_fields": _person_fields(person) if expand else [],
 				"records": [],
 				"_person": person,
 			}
@@ -529,6 +532,7 @@ def _search(context: PortalContext, criteria, *, override_reason: str | None = N
 			field_policies,
 			policy_version=policy["policy_version"],
 			expand=same_person_applied,
+			group_direct_matches=bool(state["effective"] and restricted_name_search),
 			service_name_fallback=(
 				getattr(settings, "service_name_fallback", None) or SERVICE_FALLBACK_UNSPECIFIED
 			),

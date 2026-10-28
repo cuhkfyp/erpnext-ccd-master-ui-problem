@@ -153,6 +153,10 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		)
 		self.assertIn('"first-name-search"', api)
 		self.assertIn('state["effective"] and not restricted_name_search', api)
+		self.assertIn(
+			'group_direct_matches=bool(state["effective"] and restricted_name_search)', api
+		)
+		self.assertIn('"person_fields": _person_fields(person) if expand else []', api)
 		self.assertIn("def same_person_records(record_id: str)", api)
 		self.assertNotIn('write_event("First Name Search"', api)
 		self.assertIn("Show confirmed same-person records", app)
