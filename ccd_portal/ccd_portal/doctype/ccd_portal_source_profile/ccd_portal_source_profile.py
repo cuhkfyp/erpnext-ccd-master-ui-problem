@@ -4,12 +4,12 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
-from ccd_portal.source_identity import canonical_source_id
+from ccd_portal.source_identity import configured_source_id
 
 
 class CCDPortalSourceProfile(Document):
 	def validate(self):
-		self.canonical_source_id = canonical_source_id(self.source_registration)
+		self.canonical_source_id = configured_source_id(self.source_registration)
 		if not self.canonical_source_id:
 			frappe.throw(_("Select a valid CCD Registration."))
 		duplicate = frappe.db.get_value(

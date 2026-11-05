@@ -8,11 +8,11 @@ from frappe.utils import now_datetime
 
 from ccd_portal.policy import get_active_policy
 from ccd_portal.security import normalize_value, opaque_record_id, search_token
-from ccd_portal.source_identity import canonical_source_id
+from ccd_portal.source_identity import stable_source_id
 
 
 def _source_profile(source: str) -> dict | None:
-	source_id = canonical_source_id(source)
+	source_id = stable_source_id(source)
 	row = frappe.db.get_value(
 		"CCD Portal Source Profile",
 		{"canonical_source_id": source_id, "active": 1},
@@ -118,7 +118,7 @@ def _deactivate_portal_record(name: str) -> None:
 
 def source_index_context(source: str, *, allow_sync_pending: bool = False) -> dict:
 	"""Load immutable-per-run source data once for a bounded refresh worker."""
-	source_id = canonical_source_id(source)
+	source_id = stable_source_id(source)
 	profile = _source_profile(source_id)
 	policy, field_policies = get_active_policy()
 	context = {
@@ -317,7 +317,7 @@ def refresh_source(
 ) -> dict:
 	filters: dict = {}
 	if source:
-		source = canonical_source_id(source)
+		source = stable_source_id(source)
 		filters["ccd_reg_source"] = source
 	if source_keys:
 		filters["ccd_source_key"] = ["in", source_keys]

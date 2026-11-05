@@ -306,12 +306,23 @@ class RepositoryContractTests(unittest.TestCase):
 		identity = (ROOT / "ccd_portal" / "source_identity.py").read_text()
 		indexing = (ROOT / "ccd_portal" / "indexing.py").read_text()
 		admin = (ROOT / "ccd_portal" / "admin.py").read_text()
+		profile = (
+			ROOT
+			/ "ccd_portal"
+			/ "ccd_portal"
+			/ "doctype"
+			/ "ccd_portal_source_profile"
+			/ "ccd_portal_source_profile.py"
+		).read_text()
 		patches = (ROOT / "ccd_portal" / "patches.txt").read_text()
 		self.assertIn('re.compile(r"-\\d+$")', identity)
+		self.assertIn("ccd_stable_source_key", identity)
+		self.assertIn("configured_source_id(self.source_registration)", profile)
 		self.assertIn('{"canonical_source_id": source_id, "active": 1}', indexing)
 		self.assertIn('filters["ccd_reg_source"] = source', indexing)
-		self.assertIn("same_source_lineage", admin)
+		self.assertIn("configured_source_id", admin)
 		self.assertIn("backfill_canonical_source_ids", patches)
+		self.assertIn("prefer_registration_stable_source_keys", patches)
 
 	def test_built_assets_have_no_source_maps(self):
 		assets = ROOT / "ccd_portal" / "public" / "ccd-portal" / "assets"

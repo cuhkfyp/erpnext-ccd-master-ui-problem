@@ -18,7 +18,7 @@ from ccd_portal.security import (
 	require_post,
 	require_system_manager,
 )
-from ccd_portal.source_identity import canonical_source_id
+from ccd_portal.source_identity import stable_source_id
 
 
 OPERATION_DOCTYPE = "CCD Portal Source Refresh"
@@ -76,7 +76,7 @@ def _operation_key(operation_token: str) -> str:
 
 
 def _active_key(source: str) -> str:
-	digest = hashlib.sha256(canonical_source_id(source).encode("utf-8")).hexdigest()[:32]
+	digest = hashlib.sha256(stable_source_id(source).encode("utf-8")).hexdigest()[:32]
 	return f"ccd_portal_source_refresh_active:{digest}"
 
 
@@ -136,7 +136,7 @@ def _operation_from_names(names: list[str]) -> dict | None:
 
 
 def _active_operation(source: str) -> dict | None:
-	source_id = canonical_source_id(source)
+	source_id = stable_source_id(source)
 	if frappe.db.exists("DocType", OPERATION_DOCTYPE):
 		names = frappe.get_all(
 			OPERATION_DOCTYPE,
@@ -155,7 +155,7 @@ def _active_operation(source: str) -> dict | None:
 
 
 def _latest_operation(source: str) -> dict | None:
-	source_id = canonical_source_id(source)
+	source_id = stable_source_id(source)
 	if frappe.db.exists("DocType", OPERATION_DOCTYPE):
 		names = frappe.get_all(
 			OPERATION_DOCTYPE,
@@ -198,7 +198,7 @@ def operation_for_source(source: str, viewer: str) -> dict:
 
 def disable_source_relations(source: str) -> None:
 	"""Remove the access path immediately; the profile gate is a second defence."""
-	source_id = canonical_source_id(source)
+	source_id = stable_source_id(source)
 	frappe.db.sql(
 		"""
 		UPDATE `tabCCD Portal Record Centre` rc
@@ -271,24 +271,26 @@ def queue_source_refresh(
 ) -> dict:
 	"""Commit a fail-closed source gate and enqueue the first durable segment."""
 	reason = clean_reason(reason)
-	source_id = canonical_source_id(source)
+	requested_source = stable_source_id(source)
 	locked = frappe.db.sql(
 		"SELECT name FROM `tabCCD Portal Source Profile` WHERE name=%s FOR UPDATE",
 		(profile_name,),
 	)
 	if not locked:
 		frappe.throw(_("Select an active source assignment."), frappe.ValidationError)
-	if _active_operation(source_id):
-		frappe.throw(_("A background refresh is already running for this source."), frappe.ValidationError)
-
 	profile = frappe.db.get_value(
 		"CCD Portal Source Profile",
 		profile_name,
 		["name", "source_registration", "canonical_source_id", "active"],
 		as_dict=True,
 	)
-	if not profile or not profile.active or canonical_source_id(profile.source_registration) != source_id:
+	if not profile or not profile.active:
 		frappe.throw(_("Select an active source assignment."), frappe.ValidationError)
+	source_id = stable_source_id(profile.canonical_source_id)
+	if not source_id or requested_source not in {str(profile.source_registration), source_id}:
+		frappe.throw(_("Select an active source assignment."), frappe.ValidationError)
+	if _active_operation(source_id):
+		frappe.throw(_("A background refresh is already running for this source."), frappe.ValidationError)
 
 	frappe.db.set_value("CCD Portal Source Profile", profile.name, "sync_pending", 1)
 	disable_source_relations(source_id)
@@ -412,7 +414,7 @@ def _lock_operation(operation_token: str) -> dict | None:
 
 def _validate_operation(payload: dict) -> dict:
 	profile_name = payload["source_profile"]
-	source = canonical_source_id(payload["source_registration"])
+	source = stable_source_id(payload["source_registration"])
 	profile = frappe.db.get_value(
 		"CCD Portal Source Profile",
 		profile_name,
@@ -422,7 +424,7 @@ def _validate_operation(payload: dict) -> dict:
 	if (
 		not profile
 		or not profile.active
-		or canonical_source_id(profile.canonical_source_id) != source
+		or stable_source_id(profile.canonical_source_id) != source
 		or not profile.sync_pending
 		or str(profile.modified) != str(payload.get("profile_modified"))
 	):
@@ -795,7 +797,15 @@ def start_source_refresh(source: str, reason: str) -> dict:
 		audit_denial("Index Refresh Queued")
 		raise
 	reason = clean_reason(reason)
-	existing = _active_operation(source)
+	profile = frappe.db.get_value(
+		"CCD Portal Source Profile",
+		{"source_registration": source, "active": 1},
+		["name", "assignment_mode", "sync_pending", "canonical_source_id"],
+		as_dict=True,
+	)
+	if not profile:
+		frappe.throw(_("Select an active source assignment."), frappe.ValidationError)
+	existing = _active_operation(profile.canonical_source_id)
 	if existing:
 		if existing.get("requested_by") != context.user:
 			frappe.throw(_("Another System Manager is refreshing this source."), frappe.ValidationError)
@@ -806,14 +816,6 @@ def start_source_refresh(source: str, reason: str) -> dict:
 			"total_records": int(existing.get("total_records") or 0),
 			"already_running": True,
 		}
-	profile = frappe.db.get_value(
-		"CCD Portal Source Profile",
-		{"source_registration": source, "active": 1},
-		["name", "assignment_mode", "sync_pending"],
-		as_dict=True,
-	)
-	if not profile:
-		frappe.throw(_("Select an active source assignment."), frappe.ValidationError)
 	if profile.assignment_mode == "Per-record Centre Key" and profile.sync_pending:
 		frappe.throw(
 			_("Complete the source synchronization checks before starting this refresh."),

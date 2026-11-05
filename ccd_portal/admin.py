@@ -27,7 +27,7 @@ from ccd_portal.security import (
 	require_post,
 	require_system_manager,
 )
-from ccd_portal.source_identity import canonical_source_id, same_source_lineage
+from ccd_portal.source_identity import configured_source_id
 from ccd_portal.source_refresh import (
 	assert_source_refresh_available,
 	disable_source_relations,
@@ -120,7 +120,7 @@ def _resource(resource: str):
 
 def _invalidate_source_relations(source_registration: str) -> None:
 	"""Fail closed after a source assignment changes, until its index is refreshed."""
-	disable_source_relations(source_registration)
+	disable_source_relations(configured_source_id(source_registration))
 
 
 def _is_centre_mapping_target(value: str | None) -> bool:
@@ -142,7 +142,7 @@ def _centre_mapping_rows(source_registration: str) -> list[dict]:
 
 
 def _centre_key_coverage(source_registration: str) -> dict:
-	source_id = canonical_source_id(source_registration)
+	source_id = configured_source_id(source_registration)
 	row = frappe.db.sql(
 		"""
 		SELECT COUNT(*) AS total,
@@ -222,7 +222,7 @@ def _set_centre_mapping(source_registration: str, source_column: str) -> bool:
 
 
 def _clear_centre_keys(source_registration: str) -> int:
-	source_id = canonical_source_id(source_registration)
+	source_id = configured_source_id(source_registration)
 	count = frappe.db.count("CCD Master", {"ccd_reg_source": source_id})
 	frappe.db.sql(
 		"UPDATE `tabCCD Master` SET ccd_portal_centre_key = NULL WHERE ccd_reg_source = %s",
@@ -232,7 +232,7 @@ def _clear_centre_keys(source_registration: str) -> int:
 
 
 def _strict_refresh(source_registration: str, reason: str, context) -> dict:
-	result = refresh_source(source_registration, strict=True)
+	result = refresh_source(configured_source_id(source_registration), strict=True)
 	if result["unmapped"] or result["failed"] or result["indexed"] != result["total"]:
 		frappe.throw(
 			_("The source remains disabled because every record could not be indexed. Complete synchronization and check centre aliases."),
@@ -263,7 +263,7 @@ def list_resources(resource: str):
 			)
 			row["fixed_centres_display"] = ", ".join(row.fixed_centres) or "—"
 			row.update(_mapping_status(row))
-			row.update(operation_for_source(row.source_registration, context.user))
+			row.update(operation_for_source(row.canonical_source_id, context.user))
 	write_event("Administration Read", context=context, metadata={"resource": resource})
 	return {"resource": resource, "rows": [dict(row) for row in rows]}
 
@@ -445,7 +445,8 @@ def upsert_resource(resource: str, values=None, name: str | None = None):
 			if (
 				resource == "source_profiles"
 				and fieldname == "source_registration"
-				and same_source_lineage(values[fieldname], doc.get(fieldname))
+				and configured_source_id(values[fieldname])
+				== configured_source_id(doc.get(fieldname))
 			):
 				continue
 			frappe.throw(_("Create a new record instead of changing its governed identity."))
@@ -491,7 +492,9 @@ def upsert_source_profile_and_refresh(values=None, name: str | None = None, reas
 	parsed_values = frappe.parse_json(values) if isinstance(values, str) else values
 	if not isinstance(parsed_values, dict):
 		frappe.throw(_("Invalid source configuration."), frappe.ValidationError)
-	assert_source_refresh_available(str(parsed_values.get("source_registration") or ""))
+	assert_source_refresh_available(
+		configured_source_id(str(parsed_values.get("source_registration") or ""))
+	)
 	result = upsert_resource("source_profiles", values, name)
 	refresh_operation = queue_source_refresh(
 		profile_name=result["name"],
@@ -521,7 +524,7 @@ def configure_source(values=None, name: str | None = None, authoritative_centre_
 	source_registration = str(values.get("source_registration") or "").strip()
 	if not source_registration or frappe.db.get_value("CCD Registration", source_registration, "docstatus") != 1:
 		frappe.throw(_("Select a submitted CCD Registration."), frappe.ValidationError)
-	assert_source_refresh_available(source_registration)
+	assert_source_refresh_available(configured_source_id(source_registration))
 
 	if values.get("assignment_mode") == "Fixed Centres":
 		result = upsert_source_profile_and_refresh(values, name, reason)
