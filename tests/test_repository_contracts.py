@@ -340,6 +340,8 @@ class RepositoryContractTests(unittest.TestCase):
 		self.assertIn("configured_source_id", admin)
 		self.assertIn("backfill_canonical_source_ids", patches)
 		self.assertIn("prefer_registration_stable_source_keys", patches)
+		self.assertIn("reconcile_registration_record_sources", patches)
+		self.assertIn("record_source_id_for_registration", identity)
 
 	def test_built_assets_have_no_source_maps(self):
 		assets = ROOT / "ccd_portal" / "public" / "ccd-portal" / "assets"

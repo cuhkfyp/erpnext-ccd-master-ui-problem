@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 
 
 AMENDMENT_SUFFIX = re.compile(r"-\d+$")
@@ -31,6 +32,26 @@ def source_id_for_registration(
 	return explicit or canonical_source_id(registration_name)
 
 
+def record_source_id_for_registration(
+	registration_name: str | None,
+	stable_source_key: str | None,
+	*,
+	source_exists: Callable[[str], bool],
+) -> str:
+	"""Resolve the source identity actually present on CCD Master records.
+
+	Some registrations received a durable connector key after their records had
+	already been written using the legacy amendment-name convention. Retain the
+	explicit key unless it has no records and the legacy lineage does.
+	"""
+	explicit = stable_source_id(stable_source_key)
+	legacy = canonical_source_id(registration_name)
+	if explicit and explicit != legacy:
+		if not source_exists(explicit) and legacy and source_exists(legacy):
+			return legacy
+	return explicit or legacy
+
+
 def configured_source_id(registration_name: str | None) -> str:
 	"""Resolve one submitted registration to the source stored on CCD Master.
 
@@ -50,7 +71,13 @@ def configured_source_id(registration_name: str | None) -> str:
 		if meta.has_field("ccd_stable_source_key")
 		else None
 	)
-	return source_id_for_registration(registration_name, stable_source_key)
+	return record_source_id_for_registration(
+		registration_name,
+		stable_source_key,
+		source_exists=lambda source: bool(
+			frappe.db.exists("CCD Master", {"ccd_reg_source": source})
+		),
+	)
 
 
 def same_source_lineage(

@@ -2,6 +2,7 @@ import unittest
 
 from ccd_portal.source_identity import (
 	canonical_source_id,
+	record_source_id_for_registration,
 	same_source_lineage,
 	source_id_for_registration,
 	stable_source_id,
@@ -37,6 +38,38 @@ class SourceIdentityTests(unittest.TestCase):
 
 	def test_registration_name_remains_the_legacy_fallback(self):
 		self.assertEqual(source_id_for_registration("LEGACY-SOURCE-4"), "LEGACY-SOURCE")
+
+	def test_explicit_key_is_kept_when_records_use_it(self):
+		existing = {"DURABLE-SOURCE"}
+		self.assertEqual(
+			record_source_id_for_registration(
+				"LEGACY-SOURCE-4",
+				"DURABLE-SOURCE",
+				source_exists=existing.__contains__,
+			),
+			"DURABLE-SOURCE",
+		)
+
+	def test_legacy_source_is_retained_for_records_created_before_durable_key(self):
+		existing = {"LEGACY-SOURCE"}
+		self.assertEqual(
+			record_source_id_for_registration(
+				"LEGACY-SOURCE-4",
+				"DURABLE-SOURCE",
+				source_exists=existing.__contains__,
+			),
+			"LEGACY-SOURCE",
+		)
+
+	def test_explicit_key_is_default_when_neither_source_has_records(self):
+		self.assertEqual(
+			record_source_id_for_registration(
+				"LEGACY-SOURCE-4",
+				"DURABLE-SOURCE",
+				source_exists=lambda source: False,
+			),
+			"DURABLE-SOURCE",
+		)
 
 	def test_amendments_share_one_source_lineage(self):
 		self.assertTrue(same_source_lineage("SYNTHETIC-SOURCE", "SYNTHETIC-SOURCE-34"))
