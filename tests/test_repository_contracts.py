@@ -291,6 +291,15 @@ class RepositoryContractTests(unittest.TestCase):
 		self.assertIn("if is_transient_database_lock_error(exc):", refresh)
 		self.assertIn("frappe.db.rollback()", refresh)
 		self.assertNotIn("JOB_TIMEOUT_SECONDS = 6 * 60 * 60", refresh)
+		sync = (ROOT / "ccd_portal" / "sync.py").read_text()
+		for token in (
+			"RECONCILIATION_MAX_RECORDS = 5000",
+			"RECONCILIATION_COMMIT_SIZE = 50",
+			"_source_refresh_in_progress()",
+			"_save_reconciliation_cursor(committed_state)",
+			"frappe.db.commit()",
+		):
+			self.assertIn(token, sync)
 		self.assertEqual(operation["name"], "CCD Portal Source Refresh")
 		record = json.loads(
 			(

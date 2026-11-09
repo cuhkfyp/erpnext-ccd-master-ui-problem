@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 import frappe
-from frappe.utils import add_days, now_datetime
+from frappe.utils import add_days, get_datetime, now_datetime
 from frappe.utils.password import decrypt
 
 from ccd_portal.indexing import (
@@ -14,7 +14,58 @@ from ccd_portal.indexing import (
 	mark_source_identity_deleted,
 	refresh_source,
 )
+from ccd_portal.primitives import is_transient_database_lock_error
 from ccd_portal.source_identity import stable_source_id
+
+
+RECONCILIATION_CURSOR_KEY = "ccd_portal:recent_reconciliation_cursor"
+RECONCILIATION_MAX_RECORDS = 5000
+RECONCILIATION_COMMIT_SIZE = 50
+RECONCILIATION_CURSOR_TTL_SECONDS = 14 * 24 * 60 * 60
+
+
+def _source_refresh_in_progress() -> bool:
+	return bool(
+		frappe.db.exists("DocType", "CCD Portal Source Refresh")
+		and frappe.db.exists(
+			"CCD Portal Source Refresh",
+			{"status": ["in", ["Queued", "Running"]]},
+		)
+	)
+
+
+def _reconciliation_cursor() -> dict:
+	state = frappe.cache.get_value(RECONCILIATION_CURSOR_KEY, expires=True)
+	if isinstance(state, bytes):
+		try:
+			state = json.loads(state.decode("utf-8"))
+		except (TypeError, ValueError):
+			state = None
+	if isinstance(state, str):
+		try:
+			state = json.loads(state)
+		except (TypeError, ValueError):
+			state = None
+	if isinstance(state, dict) and all(
+		state.get(field)
+		for field in ("window_start", "window_end", "last_modified")
+	):
+		return state
+	now = now_datetime()
+	return {
+		"window_start": str(add_days(now, -2)),
+		"window_end": str(now),
+		"last_modified": str(add_days(now, -2)),
+		"last_name": "",
+	}
+
+
+def _save_reconciliation_cursor(state: dict) -> None:
+	frappe.cache.set_value(
+		RECONCILIATION_CURSOR_KEY,
+		json.dumps(state, ensure_ascii=True, separators=(",", ":"), sort_keys=True),
+		expires_in_sec=RECONCILIATION_CURSOR_TTL_SECONDS,
+	)
 
 
 def on_ccd_master_change(doc, method=None) -> None:
@@ -67,16 +118,75 @@ def reconcile_recent_records() -> None:
 		return
 	if frappe.db.count("CCD Portal Policy", {"status": "Active"}) != 1:
 		return
-	cutoff = add_days(now_datetime(), -2)
-	for name in frappe.get_all("CCD Master", filters={"modified": [">=", cutoff]}, pluck="name"):
+	# This hourly safety net must never compete with a governed full-source
+	# refresh. Document events remain the primary real-time indexing path.
+	if _source_refresh_in_progress():
+		return
+	state = _reconciliation_cursor()
+	rows = frappe.db.sql(
+		"""
+		SELECT name, modified
+		  FROM `tabCCD Master`
+		 WHERE modified >= %s
+		   AND modified <= %s
+		   AND (modified > %s OR (modified = %s AND name > %s))
+		 ORDER BY modified, name
+		 LIMIT %s
+		""",
+		(
+			get_datetime(state["window_start"]),
+			get_datetime(state["window_end"]),
+			get_datetime(state["last_modified"]),
+			get_datetime(state["last_modified"]),
+			str(state.get("last_name") or ""),
+			RECONCILIATION_MAX_RECORDS,
+		),
+		as_dict=True,
+	)
+	committed_state = dict(state)
+	for position, row in enumerate(rows):
+		save_point = f"ccd_portal_reconcile_{position}"
+		frappe.db.savepoint(save_point)
 		try:
-			index_record(name)
-			reconcile_record(name)
-		except Exception:
-			frappe.log_error(frappe.get_traceback(), "CCD Portal scheduled reconciliation failure")
+			index_record(row.name)
+			reconcile_record(row.name)
+		except Exception as exc:
+			traceback = frappe.get_traceback()
+			if is_transient_database_lock_error(exc):
+				# A deadlock may discard all savepoints. Replay only the current
+				# small transaction batch during the next hourly safety-net run.
+				frappe.db.rollback()
+				_save_reconciliation_cursor(committed_state)
+				frappe.log_error(traceback, "CCD Portal scheduled reconciliation deferred")
+				return
+			frappe.db.rollback(save_point=save_point)
+			frappe.db.release_savepoint(save_point)
+			frappe.log_error(traceback, "CCD Portal scheduled reconciliation failure")
+		else:
+			frappe.db.release_savepoint(save_point)
+		if (position + 1) % RECONCILIATION_COMMIT_SIZE == 0:
+			frappe.db.commit()
+			committed_state.update(
+				{"last_modified": str(row.modified), "last_name": row.name}
+			)
+			_save_reconciliation_cursor(committed_state)
+			if _source_refresh_in_progress():
+				return
+	if rows and len(rows) % RECONCILIATION_COMMIT_SIZE:
+		frappe.db.commit()
+		last = rows[-1]
+		committed_state.update(
+			{"last_modified": str(last.modified), "last_name": last.name}
+		)
+		_save_reconciliation_cursor(committed_state)
+	if len(rows) >= RECONCILIATION_MAX_RECORDS:
+		return
+	frappe.cache.delete_value(RECONCILIATION_CURSOR_KEY)
 	try:
 		deactivate_missing_records()
+		frappe.db.commit()
 	except Exception:
+		frappe.db.rollback()
 		frappe.log_error(frappe.get_traceback(), "CCD Portal stale-index cleanup failure")
 
 
