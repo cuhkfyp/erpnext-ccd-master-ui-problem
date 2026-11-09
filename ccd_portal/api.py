@@ -545,6 +545,7 @@ def _search(context: PortalContext, criteria, *, override_reason: str | None = N
 			SELECT r.portal_record_id
 			  FROM `tabCCD Portal Search Token` t
 			  JOIN `tabCCD Portal Record` r ON r.name = t.portal_record AND r.active = 1
+			  JOIN `tabCCD Master` m ON m.name = r.ccd_master_record
 			  JOIN `tabCCD Portal Source Profile` sp
 			    ON sp.canonical_source_id = r.source_registration
 			   AND sp.active = 1 AND COALESCE(sp.sync_pending, 0) = 0

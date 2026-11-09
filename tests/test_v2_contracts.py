@@ -182,6 +182,20 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		clear = app.index("clearSearchResults()", search_start)
 		self.assertLess(clear, request)
 
+	def test_search_truncation_only_counts_live_ccd_master_records(self):
+		api = (ROOT / "ccd_portal" / "api.py").read_text()
+		query_start = api.index("FROM `tabCCD Portal Search Token` t")
+		query_end = api.index('direct_truncated = len(rows) > MAX_RESULTS', query_start)
+		search_query = api[query_start:query_end]
+		self.assertIn(
+			"JOIN `tabCCD Master` m ON m.name = r.ccd_master_record",
+			search_query,
+		)
+		self.assertLess(
+			search_query.index("JOIN `tabCCD Master`"),
+			search_query.index("LIMIT %s"),
+		)
+
 	def test_concern_queue_encrypts_context_and_limits_reporter_visibility(self):
 		api = (ROOT / "ccd_portal" / "api.py").read_text()
 		desk = (ROOT / "ccd_portal" / "public" / "js" / "ccd_portal_identity_concern.js").read_text()
