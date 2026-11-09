@@ -159,6 +159,16 @@ def index_record(
 	doc = frappe.get_doc("CCD Master", ccd_master_name)
 	if not doc.ccd_reg_source or not doc.ccd_source_key:
 		return {"status": "unmapped", "reason": "missing_source_identity"}
+	profile = context.get("profile") or _source_profile(doc.ccd_reg_source)
+	# A governed full-source refresh deliberately closes the source access gate
+	# before rebuilding its inactive staging rows. Normal CCD document events must
+	# not delete/recreate those same rows while that refresh is in progress: doing
+	# so both corrupts the staging snapshot and creates long database lock waits.
+	# The refresh worker is the sole writer until it publishes the completed index.
+	if profile and profile.get("sync_pending") and not (
+		allow_sync_pending or context.get("allow_sync_pending")
+	):
+		return {"status": "unmapped", "reason": "source_sync_pending"}
 	identity_names = frappe.get_all(
 		"CCD Master",
 		filters={"ccd_reg_source": doc.ccd_reg_source, "ccd_source_key": doc.ccd_source_key},
@@ -187,13 +197,8 @@ def index_record(
 	frappe.db.delete("CCD Portal Search Token", {"portal_record": record.name})
 	frappe.db.delete("CCD Portal Record Centre", {"portal_record": record.name})
 
-	profile = context.get("profile") or _source_profile(doc.ccd_reg_source)
 	if not profile:
 		return {"status": "unmapped", "record": record.name, "reason": "source_profile"}
-	if profile.get("sync_pending") and not (
-		allow_sync_pending or context.get("allow_sync_pending")
-	):
-		return {"status": "unmapped", "record": record.name, "reason": "source_sync_pending"}
 
 	if profile["assignment_mode"] == "Fixed Centres":
 		configured = sorted(set(profile["fixed_centres"]))

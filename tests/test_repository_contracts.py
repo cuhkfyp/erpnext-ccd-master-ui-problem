@@ -262,6 +262,7 @@ class RepositoryContractTests(unittest.TestCase):
 		for token in (
 			'queue="long"',
 			"SEGMENT_SIZE = 1000",
+			"TRANSACTION_WRITE_BATCH_SIZE = 50",
 			"SEGMENT_TIMEOUT_SECONDS = 30 * 60",
 			"MAX_SEGMENT_ATTEMPTS = 3",
 			"run_source_refresh_segment",
@@ -279,6 +280,16 @@ class RepositoryContractTests(unittest.TestCase):
 			"policy_changed_during_refresh",
 		):
 			self.assertIn(token, refresh)
+		self.assertLess(
+			indexing.index('profile = context.get("profile") or _source_profile'),
+			indexing.index("identity_names = frappe.get_all"),
+		)
+		self.assertLess(
+			indexing.index('"reason": "source_sync_pending"'),
+			indexing.index("record = _get_or_create_portal_record"),
+		)
+		self.assertIn("if is_transient_database_lock_error(exc):", refresh)
+		self.assertIn("frappe.db.rollback()", refresh)
 		self.assertNotIn("JOB_TIMEOUT_SECONDS = 6 * 60 * 60", refresh)
 		self.assertEqual(operation["name"], "CCD Portal Source Refresh")
 		record = json.loads(

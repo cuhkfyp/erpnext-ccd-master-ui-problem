@@ -26,6 +26,7 @@ OPERATION_DOCTYPE = "CCD Portal Source Refresh"
 OPERATION_TTL_SECONDS = 7 * 24 * 60 * 60
 SEGMENT_TIMEOUT_SECONDS = 30 * 60
 SEGMENT_SIZE = 1000
+TRANSACTION_WRITE_BATCH_SIZE = 50
 MAX_SEGMENT_ATTEMPTS = 3
 RECOVERY_GRACE_SECONDS = 2 * 60
 ACTIVE_STATUSES = {"Queued", "Running"}
@@ -706,11 +707,24 @@ def run_source_refresh_segment(
 					operation_token,
 					update_modified=False,
 				)
-			except Exception:
-				frappe.db.rollback(save_point=save_point)
+			except Exception as exc:
+				# MariaDB may discard every savepoint when resolving a deadlock.
+				# Roll back the whole current write batch for either transient lock
+				# condition so the original retry-safe exception is not masked by a
+				# secondary "SAVEPOINT does not exist" failure.
+				if is_transient_database_lock_error(exc):
+					frappe.db.rollback()
+				else:
+					frappe.db.rollback(save_point=save_point)
 				raise
 			else:
 				frappe.db.release_savepoint(save_point)
+				if (position + 1) % TRANSACTION_WRITE_BATCH_SIZE == 0:
+					# Staging rows remain inactive and inaccessible until publish. Small
+					# commits release row/index locks promptly; the durable cursor still
+					# moves only after the full segment, so a stopped job safely replays
+					# at most one idempotent segment without duplicate rows.
+					frappe.db.commit()
 
 		_validate_operation(payload)
 		processed = int(payload.get("processed_records") or 0) + len(names)
@@ -731,9 +745,10 @@ def run_source_refresh_segment(
 			}
 		)
 		_set_operation(operation_token, payload)
-		# The index writes and cursor move become visible atomically. A hard stop
-		# before this commit rolls back the whole segment; after it, recovery starts
-		# at the new cursor and never duplicates the committed rows.
+		# The cursor moves only after every row in this segment is staged. A hard
+		# stop before this commit replays the segment; index_record replaces its
+		# deterministic child rows, so already committed micro-batches do not create
+		# duplicates. After this commit recovery starts at the new cursor.
 		frappe.db.commit()
 	except Exception as exc:
 		traceback = frappe.get_traceback()
