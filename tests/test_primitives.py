@@ -7,6 +7,7 @@ from ccd_portal.primitives import (
 	canonical_json,
 	is_first_name_only,
 	is_restricted_name_search,
+	is_transient_database_lock_error,
 	is_valid_hkid,
 	is_valid_source_column,
 	mask_value,
@@ -16,6 +17,24 @@ from ccd_portal.primitives import (
 
 
 class PrimitiveTests(unittest.TestCase):
+	def test_transient_database_lock_errors_are_retry_safe(self):
+		lock_wait = RuntimeError(
+			1205,
+			"Lock wait timeout exceeded; try restarting transaction",
+		)
+		wrapped = RuntimeError("Frappe query timeout", lock_wait)
+		self.assertTrue(is_transient_database_lock_error(wrapped))
+		self.assertTrue(
+			is_transient_database_lock_error(
+				RuntimeError(1213, "Deadlock found when trying to get lock")
+			)
+		)
+
+	def test_non_lock_database_errors_are_not_retry_safe(self):
+		self.assertFalse(
+			is_transient_database_lock_error(RuntimeError(1062, "Duplicate entry"))
+		)
+
 	def test_english_and_chinese_first_names_are_the_standalone_weak_name_exceptions(self):
 		chinese_first_name = {
 			"fieldname": "chi_firstname",

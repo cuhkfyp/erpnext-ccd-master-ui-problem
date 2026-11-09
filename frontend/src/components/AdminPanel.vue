@@ -18,6 +18,7 @@
     <div v-if="warning" class="notice" role="status">{{ warning }}</div>
     <div v-if="sourceRefresh && ['Queued','Running'].includes(sourceRefresh.status)" class="notice" role="status">
       {{ __('Background index refresh') }}: {{ sourceRefresh.status }} · {{ sourceRefresh.processed_records || 0 }}/{{ sourceRefresh.total_records || 0 }} {{ __('records') }}
+      <span v-if="Number(sourceRefresh.attempt || 0) > 0"> · {{ __('Automatic retry') }} {{ sourceRefresh.attempt }}/{{ retryLimit(sourceRefresh.maximum_attempts) }}</span>
     </div>
 
     <template v-if="config">
@@ -263,7 +264,8 @@ function restoreDefaultAppearance() { assignAppearance(portalAppearanceDefaults.
 function reset() { editing.value = ""; Object.keys(form).forEach((key) => delete form[key]); config.value?.fields.forEach((field) => form[field.name] = field.type === "check" ? true : field.type === "multiselect" ? [] : ""); if (resource.value === "source_profiles") { form.assignment_mode = "Per-record Centre Key"; form.parser_type = "Exact"; } }
 function edit(row) { editing.value = row.name; reset(); editing.value = row.name; config.value.fields.forEach((field) => form[field.name] = field.type === "check" ? Boolean(row[field.name]) : field.type === "multiselect" ? [...(row[field.name] || [])] : (row[field.name] ?? "")); window.scrollTo({top:0,behavior:"smooth"}); }
 function columnLabel(field) { if (field === "fixed_centres_display") return __("Fixed centre(s)"); if (field === "canonical_source_id") return __("Stable CCD source"); if (field === "refresh_status") return __("Index refresh"); return config.value?.fields.find((item) => item.name === field)?.label || field.replaceAll("_", " "); }
-function formatCell(row, field) { if (resource.value === "source_profiles" && ((field === "parser_type" && row.assignment_mode === "Fixed Centres") || (field === "authoritative_centre_column" && row.assignment_mode === "Fixed Centres"))) return "—"; if (field === "refresh_status") { if (row.refresh_status) return `${row.refresh_status}${row.refresh_total ? ` ${row.refresh_processed || 0}/${row.refresh_total}` : ""}`; return row.sync_pending ? __("Pending") : __("Ready"); } const value = row[field]; return Array.isArray(value) ? (value.join(", ") || "—") : (value ?? ""); }
+function retryLimit(maximumAttempts) { return Math.max(Number(maximumAttempts || 1) - 1, 1); }
+function formatCell(row, field) { if (resource.value === "source_profiles" && ((field === "parser_type" && row.assignment_mode === "Fixed Centres") || (field === "authoritative_centre_column" && row.assignment_mode === "Fixed Centres"))) return "—"; if (field === "refresh_status") { if (row.refresh_status) { const retry = Number(row.refresh_attempt || 0) > 0 ? ` · ${__("retry")} ${row.refresh_attempt}/${retryLimit(row.refresh_maximum_attempts)}` : ""; return `${row.refresh_status}${row.refresh_total ? ` ${row.refresh_processed || 0}/${row.refresh_total}` : ""}${retry}`; } return row.sync_pending ? __("Pending") : __("Ready"); } const value = row[field]; return Array.isArray(value) ? (value.join(", ") || "—") : (value ?? ""); }
 function sourceActionLabel(row) { if (!row.sync_pending) return __("Refresh only"); return row.assignment_mode === "Per-record Centre Key" ? __("Complete sync and refresh") : __("Retry refresh"); }
 function delay(milliseconds) { return new Promise((resolve) => window.setTimeout(resolve, milliseconds)); }
 function updateSourceRefreshRow(operationToken, state) {
@@ -275,10 +277,12 @@ function updateSourceRefreshRow(operationToken, state) {
     refresh_processed: Number(state.processed_records ?? row.refresh_processed ?? 0),
     refresh_total: Number(state.total_records ?? row.refresh_total ?? 0),
     refresh_in_progress: ["Queued","Running"].includes(state.status),
+    refresh_attempt: Number(state.attempt ?? row.refresh_attempt ?? 0),
+    refresh_maximum_attempts: Number(state.maximum_attempts ?? row.refresh_maximum_attempts ?? 1),
   });
 }
 function beginSourceRefresh(operation) { sourceRefresh.value = {...operation,processed_records:operation.processed_records || 0}; updateSourceRefreshRow(operation.operation_token, sourceRefresh.value); warning.value = `${__("Source saved and disabled while its index refresh runs in the background.")} ${__("You may leave this page and return to view progress.")}`; void monitorSourceRefresh(operation.operation_token); }
-function viewSourceRefresh(row) { sourceRefresh.value = {operation_token:row.refresh_operation_token,status:row.refresh_status,processed_records:row.refresh_processed || 0,total_records:row.refresh_total || 0}; warning.value = __("Showing the existing background refresh. No new refresh was started."); void monitorSourceRefresh(row.refresh_operation_token); }
+function viewSourceRefresh(row) { sourceRefresh.value = {operation_token:row.refresh_operation_token,status:row.refresh_status,processed_records:row.refresh_processed || 0,total_records:row.refresh_total || 0,attempt:row.refresh_attempt || 0,maximum_attempts:row.refresh_maximum_attempts || 1}; warning.value = __("Showing the existing background refresh. No new refresh was started."); void monitorSourceRefresh(row.refresh_operation_token); }
 async function monitorSourceRefresh(operationToken) {
   const monitor = ++sourceRefreshMonitor;
   while (monitor === sourceRefreshMonitor) {

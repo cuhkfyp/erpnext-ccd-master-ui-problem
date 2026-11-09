@@ -11,6 +11,7 @@ from frappe.utils import get_datetime, now_datetime
 from ccd_portal.audit import audit_denial, write_event
 from ccd_portal.indexing import index_record, source_index_context
 from ccd_portal.policy import get_active_policy
+from ccd_portal.primitives import is_transient_database_lock_error
 from ccd_portal.security import (
 	PortalContext,
 	clean_reason,
@@ -190,6 +191,8 @@ def operation_for_source(source: str, viewer: str) -> dict:
 		"refresh_processed": int(payload.get("processed_records") or 0),
 		"refresh_total": int(payload.get("total_records") or 0),
 		"refresh_in_progress": payload.get("status") in ACTIVE_STATUSES,
+		"refresh_attempt": int(payload.get("attempt") or 0),
+		"refresh_maximum_attempts": MAX_SEGMENT_ATTEMPTS,
 	}
 	if payload.get("requested_by") == viewer:
 		result["refresh_operation_token"] = payload.get("operation_token")
@@ -371,18 +374,20 @@ def _stage_source_index(source: str) -> None:
 	frappe.db.commit()
 
 
-def _publish_source_index(source: str) -> None:
+def _publish_source_index(source: str, operation_token: str) -> None:
 	frappe.db.sql(
 		"""
 		UPDATE `tabCCD Portal Record` r
 		LEFT JOIN `tabCCD Master` m ON m.name=r.ccd_master_record
 		   SET r.active=CASE
-		       WHEN m.name IS NOT NULL AND m.ccd_reg_source=%s THEN 1
+		       WHEN m.name IS NOT NULL
+		        AND m.ccd_reg_source=%s
+		        AND r.refresh_operation=%s THEN 1
 		       ELSE 0
 		   END
 		 WHERE r.source_registration=%s
 		""",
-		(source, source),
+		(source, operation_token, source),
 	)
 	frappe.db.sql(
 		"""
@@ -524,6 +529,52 @@ def _fail_operation(operation_token: str, payload: dict, reason: str) -> None:
 		frappe.log_error(frappe.get_traceback(), "CCD Portal source refresh failure audit")
 
 
+def _queue_transient_segment_retry(operation_token: str, payload: dict) -> bool:
+	"""Queue the same uncommitted segment after retry-safe database contention."""
+	locked = _lock_operation(operation_token)
+	if not locked or locked.get("status") not in ACTIVE_STATUSES:
+		frappe.db.rollback()
+		return False
+	segment_number = int(payload.get("segment_number") or 0)
+	attempt = int(payload.get("attempt") or 0)
+	if (
+		int(locked.get("segment_number") or 0) != segment_number
+		or int(locked.get("attempt") or 0) != attempt
+		or str(locked.get("last_record_name") or "")
+		!= str(payload.get("last_record_name") or "")
+		or str(locked.get("current_job_id") or "")
+		!= _job_id(operation_token, segment_number, attempt)
+	):
+		frappe.db.rollback()
+		return False
+	next_attempt = attempt + 1
+	if next_attempt >= MAX_SEGMENT_ATTEMPTS:
+		frappe.db.rollback()
+		return False
+	locked.update(
+		{
+			"status": "Running",
+			"segment_state": "Queued",
+			"attempt": next_attempt,
+			"current_job_id": _job_id(operation_token, segment_number, next_attempt),
+			"last_heartbeat": now_datetime(),
+			"blocked_reason": "transient_database_lock_retry",
+			"error": None,
+		}
+	)
+	_set_operation(operation_token, locked)
+	frappe.db.commit()
+	try:
+		_enqueue_segment(locked)
+	except Exception:
+		# The durable queued state is recoverable by polling or the scheduler.
+		frappe.log_error(
+			frappe.get_traceback(),
+			"CCD Portal transient source refresh retry enqueue delayed",
+		)
+	return True
+
+
 def _complete_operation(operation_token: str, payload: dict) -> dict:
 	_validate_operation(payload)
 	processed = int(payload.get("processed_records") or 0)
@@ -532,7 +583,7 @@ def _complete_operation(operation_token: str, payload: dict) -> dict:
 		raise SourceRefreshBlocked("checkpoint_count_mismatch")
 	payload.update({"stage": "publishing", "last_heartbeat": now_datetime()})
 	_set_operation(operation_token, payload)
-	_publish_source_index(payload["source_registration"])
+	_publish_source_index(payload["source_registration"], operation_token)
 	frappe.db.set_value("CCD Portal Source Profile", payload["source_profile"], "sync_pending", 0)
 	result = {"total": total, "indexed": processed, "unmapped": 0, "failed": 0}
 	payload.update(
@@ -648,6 +699,13 @@ def run_source_refresh_segment(
 				)
 				if result.get("status") != "indexed":
 					raise SourceRefreshBlocked(result.get("reason") or "record_unmapped")
+				frappe.db.set_value(
+					"CCD Portal Record",
+					result["record"],
+					"refresh_operation",
+					operation_token,
+					update_modified=False,
+				)
 			except Exception:
 				frappe.db.rollback(save_point=save_point)
 				raise
@@ -668,6 +726,8 @@ def run_source_refresh_segment(
 				"attempt": 0,
 				"current_job_id": _job_id(operation_token, next_segment, 0),
 				"last_heartbeat": now_datetime(),
+				"blocked_reason": None,
+				"error": None,
 			}
 		)
 		_set_operation(operation_token, payload)
@@ -676,10 +736,24 @@ def run_source_refresh_segment(
 		# at the new cursor and never duplicates the committed rows.
 		frappe.db.commit()
 	except Exception as exc:
+		traceback = frappe.get_traceback()
 		frappe.db.rollback()
+		if is_transient_database_lock_error(exc) and _queue_transient_segment_retry(
+			operation_token, payload
+		):
+			frappe.log_error(
+				traceback,
+				"CCD Portal source refresh database lock; segment retry queued",
+			)
+			return {
+				"status": "Running",
+				"processed_records": int(payload.get("processed_records") or 0),
+				"total_records": int(payload.get("total_records") or 0),
+				"retrying": True,
+			}
 		reason = exc.reason if isinstance(exc, SourceRefreshBlocked) else type(exc).__name__
 		_fail_operation(operation_token, payload, reason)
-		frappe.log_error(frappe.get_traceback(), "CCD Portal background source refresh failed")
+		frappe.log_error(traceback, "CCD Portal background source refresh failed")
 		raise
 
 	try:
@@ -837,6 +911,8 @@ def _public_operation(payload: dict) -> dict:
 		"processed_records": int(payload.get("processed_records") or 0),
 		"total_records": int(payload.get("total_records") or 0),
 		"last_heartbeat": payload.get("last_heartbeat"),
+		"attempt": int(payload.get("attempt") or 0),
+		"maximum_attempts": MAX_SEGMENT_ATTEMPTS,
 	}
 	for field in ("completed_at", "error", "blocked_reason", "result"):
 		if payload.get(field) not in (None, ""):

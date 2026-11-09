@@ -17,6 +17,33 @@ FIRST_AND_SURNAME_FIELD_SETS = frozenset(
 		frozenset({"chi_firstname", "chi_surname"}),
 	}
 )
+TRANSIENT_DATABASE_LOCK_CODES = frozenset({1205, 1213})
+TRANSIENT_DATABASE_LOCK_MESSAGES = (
+	"lock wait timeout exceeded",
+	"deadlock found when trying to get lock",
+)
+
+
+def is_transient_database_lock_error(exc: BaseException) -> bool:
+	"""Recognize retry-safe lock contention through Frappe/PyMySQL wrappers."""
+	pending = [exc]
+	seen: set[int] = set()
+	while pending:
+		current = pending.pop()
+		if id(current) in seen:
+			continue
+		seen.add(id(current))
+		if any(message in str(current).casefold() for message in TRANSIENT_DATABASE_LOCK_MESSAGES):
+			return True
+		for arg in getattr(current, "args", ()):
+			if isinstance(arg, int) and arg in TRANSIENT_DATABASE_LOCK_CODES:
+				return True
+			if isinstance(arg, BaseException):
+				pending.append(arg)
+		for linked in (getattr(current, "__cause__", None), getattr(current, "__context__", None)):
+			if isinstance(linked, BaseException):
+				pending.append(linked)
+	return False
 
 
 def is_first_name_only(criteria: list[dict]) -> bool:

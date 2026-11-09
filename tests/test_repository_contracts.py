@@ -265,6 +265,9 @@ class RepositoryContractTests(unittest.TestCase):
 			"SEGMENT_TIMEOUT_SECONDS = 30 * 60",
 			"MAX_SEGMENT_ATTEMPTS = 3",
 			"run_source_refresh_segment",
+			"is_transient_database_lock_error",
+			"_queue_transient_segment_retry",
+			'transient_database_lock_retry',
 			'"last_record_name": names[-1]',
 			'"segment_state": "Queued"',
 			"recover_source_refreshes",
@@ -278,10 +281,23 @@ class RepositoryContractTests(unittest.TestCase):
 			self.assertIn(token, refresh)
 		self.assertNotIn("JOB_TIMEOUT_SECONDS = 6 * 60 * 60", refresh)
 		self.assertEqual(operation["name"], "CCD Portal Source Refresh")
+		record = json.loads(
+			(
+				ROOT
+				/ "ccd_portal"
+				/ "ccd_portal"
+				/ "doctype"
+				/ "ccd_portal_record"
+				/ "ccd_portal_record.json"
+			).read_text()
+		)
 		fields = {field["fieldname"] for field in operation["fields"]}
 		self.assertTrue(
 			{"last_record_name", "segment_number", "attempt", "current_job_id", "last_heartbeat"}.issubset(fields)
 		)
+		self.assertIn("refresh_operation", {field["fieldname"] for field in record["fields"]})
+		self.assertIn('r.refresh_operation=%s', refresh)
+		self.assertIn('"refresh_operation",\n\t\t\t\t\toperation_token', refresh)
 		self.assertIn("ccd_portal.source_refresh.recover_source_refreshes", hooks)
 		self.assertIn('frappe.db.delete("CCD Portal Search Token"', indexing)
 		self.assertIn('frappe.db.delete("CCD Portal Record Centre"', indexing)
@@ -292,6 +308,7 @@ class RepositoryContractTests(unittest.TestCase):
 		self.assertIn("COALESCE(sp.sync_pending, 0) = 0", security)
 		self.assertIn("COALESCE(sp.sync_pending, 0) = 0", api)
 		self.assertIn("Background index refresh", panel)
+		self.assertIn("Automatic retry", panel)
 		self.assertIn("function updateSourceRefreshRow(operationToken, state)", panel)
 		self.assertIn("updateSourceRefreshRow(operationToken, state);", panel)
 		self.assertIn("refresh_processed: Number(state.processed_records", panel)
