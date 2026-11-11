@@ -35,7 +35,11 @@ doc_events = {
 		"after_insert": "ccd_portal.sync.on_ccd_master_change",
 		"on_update": "ccd_portal.sync.on_ccd_master_change",
 		"on_trash": "ccd_portal.sync.on_ccd_master_delete",
-	}
+	},
+	"CCD Registration": {
+		"on_cancel": "ccd_portal.source_lifecycle.on_ccd_registration_cancel",
+		"on_trash": "ccd_portal.source_lifecycle.on_ccd_registration_trash",
+	},
 }
 
 scheduler_events = {

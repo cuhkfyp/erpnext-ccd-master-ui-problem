@@ -41,6 +41,9 @@ def after_install() -> None:
 def after_migrate() -> None:
 	ensure_external_schema()
 	ensure_settings_defaults()
+	from ccd_portal.source_lifecycle import reconcile_invalid_source_profiles
+
+	reconcile_invalid_source_profiles()
 
 
 def ensure_settings_defaults() -> dict:

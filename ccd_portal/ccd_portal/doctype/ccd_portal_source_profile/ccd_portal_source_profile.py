@@ -3,12 +3,15 @@ import re
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.utils import cint
 
 from ccd_portal.source_identity import configured_source_id
 
 
 class CCDPortalSourceProfile(Document):
 	def validate(self):
+		if cint(self.active) and frappe.db.get_value("CCD Registration", self.source_registration, "docstatus") != 1:
+			frappe.throw(_("An active source profile requires a submitted CCD Registration."))
 		self.canonical_source_id = configured_source_id(self.source_registration)
 		if not self.canonical_source_id:
 			frappe.throw(_("Select a valid CCD Registration."))
