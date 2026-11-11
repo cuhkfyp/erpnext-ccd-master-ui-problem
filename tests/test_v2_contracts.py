@@ -169,6 +169,14 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		self.assertIn("Showing the first 20 accessible exact matches.", app)
 		self.assertIn("ccd_portal.api.same_person_records", app)
 
+	def test_phone_search_uses_one_virtual_or_criterion(self):
+		api = (ROOT / "ccd_portal" / "api.py").read_text()
+		app = (ROOT / "frontend" / "src" / "App.vue").read_text()
+		self.assertIn('fieldname == PHONE_SEARCH_FIELD', api)
+		self.assertIn('"token_fieldnames": phone_fieldnames or (fieldname,)', api)
+		self.assertIn("COUNT(DISTINCT {case_expression})", api)
+		self.assertIn('boot.value?.search_fields', app)
+
 	def test_each_search_clears_previous_results_before_the_request(self):
 		app = (ROOT / "frontend" / "src" / "App.vue").read_text()
 		self.assertIn(

@@ -10,6 +10,8 @@ UNIFIED_PERSON_PATTERN = re.compile(r"^HKSR-U([0-9]{9})([0-9])$")
 SERVICE_FALLBACK_UNSPECIFIED = "Service not specified"
 SERVICE_FALLBACK_SOURCE = "CCD database/source name"
 SERVICE_NAME_FALLBACKS = frozenset({SERVICE_FALLBACK_UNSPECIFIED, SERVICE_FALLBACK_SOURCE})
+PHONE_SEARCH_FIELD = "phone_number"
+PHONE_SEARCH_FIELDNAMES = ("res_phone", "phone_num", "mobile")
 FIRST_NAME_FIELDS = frozenset({"eng_firstname", "chi_firstname"})
 FIRST_AND_SURNAME_FIELD_SETS = frozenset(
 	{
@@ -22,6 +24,44 @@ TRANSIENT_DATABASE_LOCK_MESSAGES = (
 	"lock wait timeout exceeded",
 	"deadlock found when trying to get lock",
 )
+
+
+def governed_phone_search_fieldnames(field_map: dict[str, dict]) -> tuple[str, ...]:
+	"""Return the three exact-phone fields only when policy approves the whole group."""
+	for fieldname in PHONE_SEARCH_FIELDNAMES:
+		row = field_map.get(fieldname) or {}
+		if not (
+			(row.get("source") or "CCD Master") == "CCD Master"
+			and row.get("data_kind") == "Phone"
+			and row.get("searchable")
+			and row.get("strong_identifier")
+		):
+			return ()
+	return PHONE_SEARCH_FIELDNAMES
+
+
+def portal_search_fields(fields: list[dict]) -> list[dict]:
+	"""Publish one governed phone option without changing stored field policies."""
+	field_map = {row.get("fieldname"): row for row in fields}
+	phone_fields = governed_phone_search_fieldnames(field_map)
+	searchable = [dict(row) for row in fields if row.get("searchable")]
+	if not phone_fields:
+		return searchable
+	phone_rows = [field_map[fieldname] for fieldname in phone_fields]
+	searchable = [row for row in searchable if row.get("fieldname") not in phone_fields]
+	searchable.append(
+		{
+			"source": "CCD Master",
+			"fieldname": PHONE_SEARCH_FIELD,
+			"label": "Phone Number",
+			"classification": "Contact",
+			"data_kind": "Phone",
+			"searchable": True,
+			"strong_identifier": True,
+			"display_order": min(int(row.get("display_order") or 0) for row in phone_rows),
+		}
+	)
+	return sorted(searchable, key=lambda row: (int(row.get("display_order") or 0), row["fieldname"]))
 
 
 def is_transient_database_lock_error(exc: BaseException) -> bool:

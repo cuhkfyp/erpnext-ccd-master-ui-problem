@@ -137,7 +137,7 @@ const decisionForm = reactive({decision:"Approve",reason:""});
 const reviewForm = reactive({reason_code:"",context_note:""});
 const concernForm = reactive({record_ids:[],reason:""});
 let revealTimer = null, countdownTimer = null, reviewTimer = null;
-const searchFields = computed(() => boot.value?.policy?.fields?.filter((field) => field.searchable) || []);
+const searchFields = computed(() => boot.value?.search_fields || boot.value?.policy?.fields?.filter((field) => field.searchable) || []);
 const canReveal = computed(() => ["Operator","Data Steward"].includes(boot.value?.user.authority));
 const canViewCorrections = computed(() => ["Operator","Data Steward"].includes(boot.value?.user.authority) && Boolean(boot.value?.correction_requests_enabled));
 const canRequestCorrection = computed(() => canViewCorrections.value);

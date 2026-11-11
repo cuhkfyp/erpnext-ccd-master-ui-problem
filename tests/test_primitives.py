@@ -2,9 +2,12 @@ import json
 import unittest
 
 from ccd_portal.primitives import (
+	PHONE_SEARCH_FIELD,
+	PHONE_SEARCH_FIELDNAMES,
 	SERVICE_FALLBACK_SOURCE,
 	SERVICE_FALLBACK_UNSPECIFIED,
 	canonical_json,
+	governed_phone_search_fieldnames,
 	is_first_name_only,
 	is_restricted_name_search,
 	is_transient_database_lock_error,
@@ -12,11 +15,34 @@ from ccd_portal.primitives import (
 	is_valid_source_column,
 	mask_value,
 	normalize_value,
+	portal_search_fields,
 	resolve_service_name,
 )
 
 
 class PrimitiveTests(unittest.TestCase):
+	def test_phone_search_is_consolidated_only_when_all_three_fields_are_governed(self):
+		fields = [
+			{
+				"source": "CCD Master",
+				"fieldname": fieldname,
+				"label": fieldname,
+				"classification": "Contact",
+				"data_kind": "Phone",
+				"searchable": True,
+				"strong_identifier": True,
+				"display_order": index,
+			}
+			for index, fieldname in enumerate(PHONE_SEARCH_FIELDNAMES, start=10)
+		]
+		field_map = {row["fieldname"]: row for row in fields}
+		self.assertEqual(governed_phone_search_fieldnames(field_map), PHONE_SEARCH_FIELDNAMES)
+		published = portal_search_fields(fields)
+		self.assertEqual([row["fieldname"] for row in published], [PHONE_SEARCH_FIELD])
+		self.assertEqual(published[0]["label"], "Phone Number")
+		field_map["mobile"] = {**field_map["mobile"], "searchable": False}
+		self.assertEqual(governed_phone_search_fieldnames(field_map), ())
+
 	def test_transient_database_lock_errors_are_retry_safe(self):
 		lock_wait = RuntimeError(
 			1205,
@@ -158,3 +184,4 @@ class PrimitiveTests(unittest.TestCase):
 		self.assertTrue(rows)
 		self.assertTrue(all(row["ccd_reg_source"].startswith("SYNTHETIC-") for row in rows))
 		self.assertTrue(all(".invalid" in row["email"] for row in rows))
+	governed_phone_search_fieldnames,

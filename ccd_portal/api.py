@@ -20,9 +20,12 @@ from ccd_portal.identity import (
 from ccd_portal.identity_rules import bounded_record_order
 from ccd_portal.policy import get_active_policy, policy_field_map, public_policy, reveal_allowed
 from ccd_portal.primitives import (
+	PHONE_SEARCH_FIELD,
 	SERVICE_FALLBACK_UNSPECIFIED,
+	governed_phone_search_fieldnames,
 	is_restricted_name_search,
 	is_valid_unified_person_number,
+	portal_search_fields,
 	resolve_service_name,
 )
 from ccd_portal.security import (
@@ -94,7 +97,21 @@ def _search_criteria(criteria, field_map: dict[str, dict]) -> list[dict]:
 		if not isinstance(item, dict) or set(item) - {"fieldname", "value"}:
 			frappe.throw(_("Invalid search criteria."), frappe.ValidationError)
 		fieldname = str(item.get("fieldname") or "")
-		field_policy = field_map.get(fieldname)
+		phone_fieldnames = (
+			governed_phone_search_fieldnames(field_map)
+			if fieldname == PHONE_SEARCH_FIELD
+			else ()
+		)
+		field_policy = (
+			{
+				"source": "CCD Master",
+				"data_kind": "Phone",
+				"searchable": 1,
+				"strong_identifier": 1,
+			}
+			if phone_fieldnames
+			else field_map.get(fieldname)
+		)
 		if not field_policy or not field_policy.get("searchable"):
 			frappe.throw(_("Invalid search criteria."), frappe.ValidationError)
 		source = field_policy.get("source") or "CCD Master"
@@ -111,6 +128,7 @@ def _search_criteria(criteria, field_map: dict[str, dict]) -> list[dict]:
 				"data_kind": field_policy["data_kind"],
 				"strong": bool(field_policy.get("strong_identifier")),
 				"normalized": value,
+				"token_fieldnames": phone_fieldnames or (fieldname,),
 			}
 		)
 	if len({row["fieldname"] for row in normalized}) != len(normalized):
@@ -530,16 +548,33 @@ def _search(context: PortalContext, criteria, *, override_reason: str | None = N
 			}
 		)
 	else:
-		tokens = [(row["fieldname"], search_token(row["fieldname"], row["normalized"])) for row in normalized]
-		conditions = " OR ".join(["(t.fieldname = %s AND t.token = %s)"] * len(tokens))
-		values: list = [item for pair in tokens for item in pair]
+		criterion_tokens = [
+			[
+				(fieldname, search_token(fieldname, row["normalized"]))
+				for fieldname in row["token_fieldnames"]
+			]
+			for row in normalized
+		]
+		criterion_conditions = [
+			"(" + " OR ".join(["(t.fieldname = %s AND t.token = %s)"] * len(tokens)) + ")"
+			for tokens in criterion_tokens
+		]
+		conditions = " OR ".join(criterion_conditions)
+		condition_values: list = [
+			item for tokens in criterion_tokens for pair in tokens for item in pair
+		]
+		values: list = [*condition_values]
 		scope_clause = ""
 		if not context.is_break_glass:
 			scope_clause = f" AND rc.centre IN ({', '.join(['%s'] * len(context.centres))})"
 		values.extend([policy["policy_version"], nowdate(), nowdate()])
 		if not context.is_break_glass:
 			values.extend(context.centres)
-		values.extend([len(tokens), MAX_RESULTS + 1])
+		case_expression = "CASE " + " ".join(
+			f"WHEN {condition} THEN {index}"
+			for index, condition in enumerate(criterion_conditions, start=1)
+		) + " END"
+		values.extend([*condition_values, len(criterion_tokens), MAX_RESULTS + 1])
 		rows = frappe.db.sql(
 			f"""
 			SELECT r.portal_record_id
@@ -555,7 +590,7 @@ def _search(context: PortalContext, criteria, *, override_reason: str | None = N
 			   AND (rc.effective_to IS NULL OR rc.effective_to >= %s)
 			   {scope_clause}
 			 GROUP BY r.portal_record_id
-			HAVING COUNT(DISTINCT t.token) = %s
+			HAVING COUNT(DISTINCT {case_expression}) = %s
 			 ORDER BY r.portal_record_id
 			 LIMIT %s
 			""",
@@ -650,6 +685,7 @@ def bootstrap():
 				row for row in published_policy["fields"] if row.get("source") != "Unified Person"
 			]
 		response["policy"] = published_policy
+		response["search_fields"] = portal_search_fields(published_policy["fields"])
 		response["same_person"] = same_person
 		response["can_report_identity_concern"] = bool(
 			cint(getattr(settings, "identity_concerns_enabled", 1))
