@@ -3,6 +3,7 @@ from __future__ import annotations
 import frappe
 from frappe import _
 
+from ccd_portal.primitives import portal_visible_fields
 from ccd_portal.security import split_csv
 
 
@@ -64,6 +65,6 @@ def public_policy(policy: dict, fields: list[dict], authority: str) -> dict:
 				"revealable": reveal_allowed(row, authority),
 				"display_order": row["display_order"],
 			}
-			for row in fields
+			for row in portal_visible_fields(fields)
 		],
 	}

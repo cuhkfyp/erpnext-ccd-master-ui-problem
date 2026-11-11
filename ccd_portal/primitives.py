@@ -12,6 +12,7 @@ SERVICE_FALLBACK_SOURCE = "CCD database/source name"
 SERVICE_NAME_FALLBACKS = frozenset({SERVICE_FALLBACK_UNSPECIFIED, SERVICE_FALLBACK_SOURCE})
 PHONE_SEARCH_FIELD = "phone_number"
 PHONE_SEARCH_FIELDNAMES = ("res_phone", "phone_num", "mobile")
+PORTAL_HIDDEN_FIELDNAMES = frozenset({"bc_num"})
 FIRST_NAME_FIELDS = frozenset({"eng_firstname", "chi_firstname"})
 FIRST_AND_SURNAME_FIELD_SETS = frozenset(
 	{
@@ -40,8 +41,18 @@ def governed_phone_search_fieldnames(field_map: dict[str, dict]) -> tuple[str, .
 	return PHONE_SEARCH_FIELDNAMES
 
 
+def is_portal_field_visible(fieldname: str) -> bool:
+	"""Keep retained policy fields out of every client-facing portal surface."""
+	return str(fieldname or "") not in PORTAL_HIDDEN_FIELDNAMES
+
+
+def portal_visible_fields(fields: list[dict]) -> list[dict]:
+	return [row for row in fields if is_portal_field_visible(row.get("fieldname"))]
+
+
 def portal_search_fields(fields: list[dict]) -> list[dict]:
 	"""Publish one governed phone option without changing stored field policies."""
+	fields = portal_visible_fields(fields)
 	field_map = {row.get("fieldname"): row for row in fields}
 	phone_fields = governed_phone_search_fieldnames(field_map)
 	searchable = [dict(row) for row in fields if row.get("searchable")]

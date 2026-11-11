@@ -23,9 +23,11 @@ from ccd_portal.primitives import (
 	PHONE_SEARCH_FIELD,
 	SERVICE_FALLBACK_UNSPECIFIED,
 	governed_phone_search_fieldnames,
+	is_portal_field_visible,
 	is_restricted_name_search,
 	is_valid_unified_person_number,
 	portal_search_fields,
+	portal_visible_fields,
 	resolve_service_name,
 )
 from ccd_portal.security import (
@@ -97,6 +99,8 @@ def _search_criteria(criteria, field_map: dict[str, dict]) -> list[dict]:
 		if not isinstance(item, dict) or set(item) - {"fieldname", "value"}:
 			frappe.throw(_("Invalid search criteria."), frappe.ValidationError)
 		fieldname = str(item.get("fieldname") or "")
+		if not is_portal_field_visible(fieldname):
+			frappe.throw(_("Invalid search criteria."), frappe.ValidationError)
 		phone_fieldnames = (
 			governed_phone_search_fieldnames(field_map)
 			if fieldname == PHONE_SEARCH_FIELD
@@ -172,6 +176,8 @@ def _masked_record(
 		if (row.get("source") or "CCD Master") != "CCD Master":
 			continue
 		fieldname = row["fieldname"]
+		if not is_portal_field_visible(fieldname):
+			continue
 		if fieldname not in values:
 			continue
 		fields.append(
@@ -861,7 +867,7 @@ def reveal(record_id: str, reason_code: str, context_note: str | None = None):
 	values = _record_document(access, fields)
 	revealed = [
 		{"fieldname": row["fieldname"], "label": row["label"], "value": values.get(row["fieldname"])}
-		for row in fields
+		for row in portal_visible_fields(fields)
 		if reveal_allowed(row, context.authority) and values.get(row["fieldname"]) is not None
 	]
 	person = None
@@ -1355,7 +1361,7 @@ def break_glass(action: str, reason: str, payload=None):
 			"id": access["portal_record_id"],
 			"fields": [
 				{"fieldname": row["fieldname"], "label": row["label"], "value": values.get(row["fieldname"])}
-				for row in fields
+				for row in portal_visible_fields(fields)
 			],
 			"expires_in": cint(settings.reveal_ttl_seconds) or 120,
 		}

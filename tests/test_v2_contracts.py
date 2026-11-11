@@ -182,6 +182,15 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		self.assertIn("COUNT(DISTINCT {case_expression})", api)
 		self.assertIn('boot.value?.search_fields', app)
 
+	def test_birth_certificate_field_is_suppressed_from_portal_surfaces(self):
+		primitives = (ROOT / "ccd_portal" / "primitives.py").read_text()
+		api = (ROOT / "ccd_portal" / "api.py").read_text()
+		policy = (ROOT / "ccd_portal" / "policy.py").read_text()
+		self.assertIn('PORTAL_HIDDEN_FIELDNAMES = frozenset({"bc_num"})', primitives)
+		self.assertIn("if not is_portal_field_visible(fieldname):", api)
+		self.assertIn("for row in portal_visible_fields(fields)", api)
+		self.assertIn("for row in portal_visible_fields(fields)", policy)
+
 	def test_each_search_clears_previous_results_before_the_request(self):
 		app = (ROOT / "frontend" / "src" / "App.vue").read_text()
 		self.assertIn(

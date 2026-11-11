@@ -16,11 +16,20 @@ from ccd_portal.primitives import (
 	mask_value,
 	normalize_value,
 	portal_search_fields,
+	portal_visible_fields,
 	resolve_service_name,
 )
 
 
 class PrimitiveTests(unittest.TestCase):
+	def test_birth_certificate_field_is_retained_but_not_published_to_the_portal(self):
+		fields = [
+			{"fieldname": "bc_num", "label": "Birth Certificate Number", "searchable": True},
+			{"fieldname": "hkid", "label": "HKID", "searchable": True},
+		]
+		self.assertEqual([row["fieldname"] for row in portal_visible_fields(fields)], ["hkid"])
+		self.assertEqual([row["fieldname"] for row in portal_search_fields(fields)], ["hkid"])
+
 	def test_phone_search_is_consolidated_only_when_all_three_fields_are_governed(self):
 		fields = [
 			{
