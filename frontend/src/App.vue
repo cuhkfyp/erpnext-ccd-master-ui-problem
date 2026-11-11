@@ -25,7 +25,7 @@
         <template v-if="view === 'search'">
           <section class="card">
             <h2>{{ __('Find a client record') }}</h2>
-            <p class="muted">{{ __('Use one policy-approved exact identifier, an exact English or Chinese First Name, an exact same-language First Name and Surname, or combine another name with date of birth. Browse and fuzzy search are unavailable.') }}</p>
+            <p class="muted">{{ __('Use one policy-approved exact identifier, an exact English or Chinese First Name with optional exact name criteria, or combine another name with date of birth. Browse and fuzzy search are unavailable.') }}</p>
             <form @submit.prevent="runSearch">
               <div class="grid">
                 <div v-for="(criterion,index) in criteria" :key="index" class="field">
@@ -165,12 +165,12 @@ const searchGuidanceMessage = computed(() => {
   const guidance = searchGuidanceState.value;
   if (!guidance) return "";
   if (guidance.code === "date-needs-name") return __(`${guidance.label} cannot be searched alone. Add a name field.`);
-  if (guidance.code === "english-surname-needs-companion") return __(`${guidance.label} cannot be searched alone. Add English First Name or Date of Birth.`);
-  if (guidance.code === "chinese-surname-needs-companion") return __(`${guidance.label} cannot be searched alone. Add Chinese First Name or Date of Birth.`);
+  if (guidance.code === "english-surname-needs-companion") return __(`${guidance.label} cannot be searched alone. Add an English or Chinese First Name, or Date of Birth.`);
+  if (guidance.code === "chinese-surname-needs-companion") return __(`${guidance.label} cannot be searched alone. Add an English or Chinese First Name, or Date of Birth.`);
   if (guidance.code === "field-needs-companion") return __(`${guidance.label} cannot be searched alone. Add another policy-approved criterion.`);
   if (guidance.code === "unified-alone") return __("Unified Person Number must be searched on its own. Remove the other criteria.");
   if (guidance.code === "duplicate") return __("Each search field may be supplied once. Choose a different field.");
-  return __("This combination is not sufficient. Add Date of Birth, or use a matching First Name and Surname.");
+  return __("This combination is not sufficient. Add Date of Birth, or an English or Chinese First Name.");
 });
 const correctableFields = computed(() => selected.value?.fields.filter((field) => field.correctable) || []);
 const displayFields = computed(() => { if (!selected.value) return []; const raw = Object.fromEntries((revealed.value?.fields || []).map((field) => [field.fieldname,field.value])); return selected.value.fields.map((field) => ({...field,value:Object.hasOwn(raw,field.fieldname)?raw[field.fieldname]:field.value})); });
@@ -186,7 +186,7 @@ const contactGroups = computed(() => [
 function inputType(fieldname) { const kind=searchFields.value.find((f)=>f.fieldname===fieldname)?.data_kind; return kind==="Date"?"date":kind==="Email"?"email":"text"; }
 function addCriterion() { if(criteria.length<5&&!hasUnifiedCriterion.value)criteria.push({fieldname:"",value:""}); }
 function handleSearchFieldChange() { if(shouldAppendSearchCriterion(criteria,searchFields.value))addCriterion(); }
-function isRestrictedNameSearch(rows) { const fields=rows.map((row)=>row.fieldname); if(!fields.every((fieldname)=>searchFields.value.find((field)=>field.fieldname===fieldname)?.data_kind==="Name"))return false; if(fields.length===1)return ["eng_firstname","chi_firstname"].includes(fields[0]); return [["eng_firstname","eng_surname"],["chi_firstname","chi_surname"]].some((pair)=>pair.every((field)=>fields.includes(field))); }
+function isRestrictedNameSearch(rows) { const fields=rows.map((row)=>row.fieldname); return fields.every((fieldname)=>searchFields.value.find((field)=>field.fieldname===fieldname)?.data_kind==="Name") && fields.some((fieldname)=>["eng_firstname","chi_firstname"].includes(fieldname)); }
 function serviceNames(records) { return [...new Set((records || []).map((record)=>record.service_name).filter(Boolean))]; }
 function setUniqueResultServices() { serviceSummary.value=results.value.length===1?serviceNames(results.value[0].records):[]; }
 async function loadUniqueResultServices(searchServices=[]) { setUniqueResultServices(); if(searchServices.length){serviceSummary.value=[...new Set(searchServices)];return;} const records=results.value.length===1?results.value[0].records:[]; if(records.length!==1)return; try { const summary=await call("ccd_portal.api.service_summary",{record_id:records[0].id}); serviceSummary.value=[...new Set(summary.services || serviceSummary.value)]; } catch { /* Identity summary is additive; retain the direct record's service label. */ } }

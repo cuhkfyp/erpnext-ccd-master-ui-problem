@@ -102,7 +102,7 @@ class PrimitiveTests(unittest.TestCase):
 			)
 		)
 
-	def test_restricted_name_search_accepts_matching_first_and_surname_pairs(self):
+	def test_restricted_name_search_accepts_first_name_with_additional_exact_names(self):
 		def name(fieldname):
 			return {"fieldname": fieldname, "source": "CCD Master", "data_kind": "Name"}
 
@@ -119,8 +119,13 @@ class PrimitiveTests(unittest.TestCase):
 			is_restricted_name_search([name("chi_surname"), name("chi_firstname")])
 		)
 		self.assertFalse(is_restricted_name_search([name("eng_surname")]))
-		self.assertFalse(
+		self.assertTrue(
 			is_restricted_name_search([name("eng_firstname"), name("chi_surname")])
+		)
+		self.assertTrue(
+			is_restricted_name_search(
+				[name("chi_firstname"), name("eng_firstname"), name("chi_surname")]
+			)
 		)
 		self.assertFalse(
 			is_restricted_name_search(

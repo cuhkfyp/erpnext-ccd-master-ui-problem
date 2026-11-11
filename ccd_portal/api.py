@@ -91,7 +91,7 @@ def _search_criteria(criteria, field_map: dict[str, dict]) -> list[dict]:
 	criteria = _json(criteria, list)
 	if not 1 <= len(criteria) <= 5:
 		frappe.throw(
-			_("Use an approved identifier, an exact First Name, an exact same-language First Name and Surname, or a name with date of birth."),
+			_("Use an approved identifier, an exact First Name with optional exact name criteria, or a name with date of birth."),
 			frappe.ValidationError,
 		)
 	normalized: list[dict] = []
@@ -146,7 +146,7 @@ def _search_criteria(criteria, field_map: dict[str, dict]) -> list[dict]:
 	)
 	if not approved and not combined_name_dob and not is_restricted_name_search(normalized):
 		frappe.throw(
-			_("Use an approved identifier, an exact First Name, an exact same-language First Name and Surname, or a name with date of birth."),
+			_("Use an approved identifier, an exact First Name with optional exact name criteria, or a name with date of birth."),
 			frappe.ValidationError,
 		)
 	return normalized

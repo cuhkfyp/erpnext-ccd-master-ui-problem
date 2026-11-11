@@ -14,12 +14,6 @@ PHONE_SEARCH_FIELD = "phone_number"
 PHONE_SEARCH_FIELDNAMES = ("res_phone", "phone_num", "mobile")
 PORTAL_HIDDEN_FIELDNAMES = frozenset({"bc_num"})
 FIRST_NAME_FIELDS = frozenset({"eng_firstname", "chi_firstname"})
-FIRST_AND_SURNAME_FIELD_SETS = frozenset(
-	{
-		frozenset({"eng_firstname", "eng_surname"}),
-		frozenset({"chi_firstname", "chi_surname"}),
-	}
-)
 TRANSIENT_DATABASE_LOCK_CODES = frozenset({1205, 1213})
 TRANSIENT_DATABASE_LOCK_MESSAGES = (
 	"lock wait timeout exceeded",
@@ -108,16 +102,13 @@ def is_first_name_only(criteria: list[dict]) -> bool:
 
 
 def is_restricted_name_search(criteria: list[dict]) -> bool:
-	"""Allow only the governed exact-name shapes that use the lower search limit."""
+	"""Apply weak-name controls when an exact first name governs an all-name search."""
 	if not criteria or not all(
 		row.get("source") == "CCD Master" and row.get("data_kind") == "Name"
 		for row in criteria
 	):
 		return False
-	if is_first_name_only(criteria):
-		return True
-	fieldnames = frozenset(row.get("fieldname") for row in criteria)
-	return any(pair.issubset(fieldnames) for pair in FIRST_AND_SURNAME_FIELD_SETS)
+	return any(row.get("fieldname") in FIRST_NAME_FIELDS for row in criteria)
 
 
 def canonical_json(value) -> str:

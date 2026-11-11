@@ -168,8 +168,8 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		self.assertNotIn('write_event("First Name Search"', api)
 		self.assertIn("Show confirmed same-person records", app)
 		self.assertIn("searchedByRestrictedName && selected.can_expand_same_person", app)
-		self.assertIn('["eng_firstname","eng_surname"]', app)
-		self.assertIn('["chi_firstname","chi_surname"]', app)
+		self.assertIn('["eng_firstname","chi_firstname"]', app)
+		self.assertIn("fields.some((fieldname)=>", app)
 		self.assertIn("searchTruncated.value=Boolean(data.truncated)", app)
 		self.assertIn("Showing the first 20 accessible exact matches.", app)
 		self.assertIn("ccd_portal.api.same_person_records", app)
@@ -210,7 +210,10 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		self.assertIn("shouldAppendSearchCriterion(criteria,searchFields.value)", app)
 		self.assertIn("export function shouldAppendSearchCriterion", guidance)
 		self.assertIn('"unsupported-combination"', guidance)
-		self.assertIn("pair.issubset(fieldnames)", (ROOT / "ccd_portal" / "primitives.py").read_text())
+		self.assertIn(
+			'any(row.get("fieldname") in FIRST_NAME_FIELDS for row in criteria)',
+			(ROOT / "ccd_portal" / "primitives.py").read_text(),
+		)
 
 	def test_search_truncation_only_counts_live_ccd_master_records(self):
 		api = (ROOT / "ccd_portal" / "api.py").read_text()

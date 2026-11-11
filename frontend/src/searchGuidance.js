@@ -1,8 +1,4 @@
 const FIRST_NAME_FIELDS = new Set(["eng_firstname", "chi_firstname"]);
-const SAME_LANGUAGE_NAME_PAIRS = [
-  new Set(["eng_firstname", "eng_surname"]),
-  new Set(["chi_firstname", "chi_surname"]),
-];
 const GUIDANCE_FIXED_BY_ANOTHER_CRITERION = new Set([
   "date-needs-name",
   "english-surname-needs-companion",
@@ -14,14 +10,6 @@ const GUIDANCE_FIXED_BY_ANOTHER_CRITERION = new Set([
 function selectedFields(criteria, searchFields) {
   const byName = new Map(searchFields.map((field) => [field.fieldname, field]));
   return criteria.map((row) => byName.get(row.fieldname)).filter(Boolean);
-}
-
-function isSameLanguageNamePair(fields) {
-  if (fields.length < 2) return false;
-  const names = new Set(fields.map((field) => field.fieldname));
-  return SAME_LANGUAGE_NAME_PAIRS.some(
-    (pair) => [...pair].every((fieldname) => names.has(fieldname)),
-  );
 }
 
 export function searchFieldRequiresCompanion(field) {
@@ -42,8 +30,8 @@ export function isAllowedSearchShape(criteria, searchFields) {
     fields.some((field) => field.data_kind === "Name")
     && fields.some((field) => field.data_kind === "Date")
   ) return true;
-  if (fields.length === 1 && FIRST_NAME_FIELDS.has(fields[0].fieldname)) return true;
-  return isSameLanguageNamePair(fields);
+  return fields.every((field) => field.data_kind === "Name")
+    && fields.some((field) => FIRST_NAME_FIELDS.has(field.fieldname));
 }
 
 export function searchGuidance(criteria, searchFields) {

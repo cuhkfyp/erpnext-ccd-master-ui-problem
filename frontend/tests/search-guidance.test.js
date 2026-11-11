@@ -70,6 +70,20 @@ test("valid name combinations clear the guidance", () => {
   );
 });
 
+test("an approved first name remains sufficient with cross-language exact names", () => {
+  assert.equal(isAllowedSearchShape(criteria("chi_firstname", "eng_surname"), fields), true);
+  assert.equal(isAllowedSearchShape(criteria("eng_firstname", "chi_surname"), fields), true);
+  assert.equal(
+    isAllowedSearchShape(criteria("chi_firstname", "eng_firstname", "eng_surname"), fields),
+    true,
+  );
+  assert.equal(searchGuidance(criteria("chi_firstname", "eng_surname"), fields), null);
+  assert.equal(
+    shouldAppendSearchCriterion(criteria("chi_firstname", "eng_surname"), fields),
+    false,
+  );
+});
+
 test("each still-incomplete selection requests another criterion", () => {
   assert.equal(shouldAppendSearchCriterion(criteria("eng_surname"), fields), true);
   assert.equal(shouldAppendSearchCriterion(criteria("eng_surname", "chi_surname"), fields), true);
