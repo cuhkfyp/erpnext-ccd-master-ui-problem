@@ -873,12 +873,14 @@ def reveal(record_id: str, reason_code: str, context_note: str | None = None):
 			person = person_for_record(access["ccd_master_record"])
 		except Exception:
 			person = None
+	context_note = clean_context(context_note)
 	write_event(
 		"PII Reveal",
 		context=context,
 		portal_record_id=record_id,
 		reason_code=reason_code,
-		protected_value=clean_context(context_note),
+		protected_value=context_note,
+		user_context=context_note,
 		metadata={
 			"revealed_fields": [row["fieldname"] for row in revealed]
 			+ (["unified_person_number"] if person else []),

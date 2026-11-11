@@ -6,6 +6,7 @@ app_email = "digital@rehabsociety.org.hk"
 app_license = "mit"
 
 doctype_js = {
+	"CCD Portal Audit Event": "public/js/ccd_portal_audit_event.js",
 	"CCD Portal Identity Concern": "public/js/ccd_portal_identity_concern.js",
 }
 

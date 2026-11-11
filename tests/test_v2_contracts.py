@@ -254,6 +254,28 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		for storage in ("localStorage", "sessionStorage", "indexedDB"):
 			self.assertNotIn(storage, app)
 
+	def test_reveal_justification_is_encrypted_and_system_manager_review_is_audited(self):
+		audit = (ROOT / "ccd_portal" / "audit.py").read_text()
+		api = (ROOT / "ccd_portal" / "api.py").read_text()
+		hooks = (ROOT / "ccd_portal" / "hooks.py").read_text()
+		desk = (ROOT / "ccd_portal" / "public" / "js" / "ccd_portal_audit_event.js").read_text()
+		doctype = json.loads(
+			(DOCTYPE_ROOT / "ccd_portal_audit_event" / "ccd_portal_audit_event.json").read_text()
+		)
+		fields = {row["fieldname"]: row for row in doctype["fields"]}
+		self.assertTrue(fields["encrypted_user_context"]["hidden"])
+		self.assertTrue(fields["encrypted_user_context"]["read_only"])
+		self.assertIn('"encrypted_user_context": encrypt(user_context)', audit)
+		self.assertIn('"System Manager" not in set(frappe.get_roles(user))', audit)
+		self.assertIn('"Audit Justification Viewed"', audit)
+		self.assertIn("user_context=context_note", api)
+		self.assertIn("Encrypted at rest and readable by System Managers", (ROOT / "frontend" / "src" / "App.vue").read_text())
+		self.assertIn('"CCD Portal Audit Event": "public/js/ccd_portal_audit_event.js"', hooks)
+		self.assertIn("View typed justification", desk)
+		self.assertIn('document.addEventListener("visibilitychange"', desk)
+		for storage in ("localStorage", "sessionStorage", "indexedDB"):
+			self.assertNotIn(storage, desk)
+
 	def test_reveal_purposes_are_scoped_to_the_action(self):
 		api = (ROOT / "ccd_portal" / "api.py").read_text()
 		app = (ROOT / "frontend" / "src" / "App.vue").read_text()
