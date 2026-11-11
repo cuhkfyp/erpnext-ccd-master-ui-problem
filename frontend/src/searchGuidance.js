@@ -47,6 +47,14 @@ export function searchGuidance(criteria, searchFields) {
   if (new Set(names).size !== names.length) return { code: "duplicate" };
   if (fields.some((field) => field.source === "Unified Person")) return { code: "unified-alone" };
 
+  // A user may add the next empty row before deciding which companion field
+  // to use. Do not describe an otherwise valid standalone selection as
+  // invalid merely because that new row is still blank.
+  if (fields.length < criteria.length) {
+    const selectedCriteria = criteria.filter((row) => names.includes(row.fieldname));
+    if (isAllowedSearchShape(selectedCriteria, searchFields)) return null;
+  }
+
   if (fields.length === 1) {
     const field = fields[0];
     if (field.data_kind === "Date") return { code: "date-needs-name", label: field.label };

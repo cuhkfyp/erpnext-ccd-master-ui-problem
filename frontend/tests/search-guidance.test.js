@@ -26,11 +26,28 @@ test("approved identifiers and exact first names may be searched alone", () => {
   assert.equal(searchFieldRequiresCompanion(fields[1]), false);
 });
 
+test("an added blank row does not invalidate a standalone first name", () => {
+  const blankAfterChineseFirstName = [
+    { fieldname: "chi_firstname", value: "根深" },
+    { fieldname: "", value: "" },
+  ];
+  const blankAfterIdentifier = [
+    { fieldname: "hksr_num", value: "12345" },
+    { fieldname: "", value: "" },
+  ];
+  assert.equal(searchGuidance(blankAfterChineseFirstName, fields), null);
+  assert.equal(searchGuidance(blankAfterIdentifier, fields), null);
+});
+
 test("surname and date selections immediately request a companion", () => {
   assert.equal(searchFieldRequiresCompanion(fields[2]), true);
   assert.equal(searchFieldRequiresCompanion(fields[5]), true);
   assert.equal(searchGuidance(criteria("eng_surname"), fields).code, "english-surname-needs-companion");
   assert.equal(searchGuidance(criteria("birthday"), fields).code, "date-needs-name");
+  assert.equal(
+    searchGuidance([{ fieldname: "eng_surname", value: "Smith" }, { fieldname: "", value: "" }], fields).code,
+    "english-surname-needs-companion",
+  );
 });
 
 test("valid name combinations clear the guidance", () => {
