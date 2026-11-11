@@ -204,6 +204,8 @@ if (( ! RUNTIME_ONLY )); then
 	docker exec -u frappe -w "$APP_IN_CONTAINER/frontend" frappe_docker-backend-1 \
 		npm ci --no-audit --no-fund
 	docker exec -u frappe -w "$APP_IN_CONTAINER/frontend" frappe_docker-backend-1 \
+		npm test
+	docker exec -u frappe -w "$APP_IN_CONTAINER/frontend" frappe_docker-backend-1 \
 		npm run check
 	docker exec -u frappe -w "$APP_IN_CONTAINER/frontend" frappe_docker-backend-1 \
 		npm run build

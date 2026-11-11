@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "check": "vue-tsc --noEmit"
+    "check": "vue-tsc --noEmit",
+    "test": "node --test tests/*.test.js"
   },
   "dependencies": {
     "frappe-ui": "0.1.168",

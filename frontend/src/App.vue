@@ -30,7 +30,7 @@
               <div class="grid">
                 <div v-for="(criterion,index) in criteria" :key="index" class="field">
                   <label :for="`criteria-${index}`">{{ __('Search field') }}</label>
-                  <select :id="`criteria-${index}`" v-model="criterion.fieldname" required>
+                  <select :id="`criteria-${index}`" v-model="criterion.fieldname" required @change="handleSearchFieldChange(index)">
                     <option value="" disabled>{{ __('Select a field') }}</option>
                     <option v-for="field in searchFields" :key="field.fieldname" :value="field.fieldname">{{ field.label }}</option>
                   </select>
@@ -38,8 +38,9 @@
                   <button v-if="criteria.length > 1" type="button" class="secondary" @click="criteria.splice(index,1)">{{ __('Remove') }}</button>
                 </div>
               </div>
+              <p v-if="searchGuidanceMessage" class="notice search-guidance" role="status" aria-live="polite">{{ searchGuidanceMessage }}</p>
               <div class="actions">
-                <button type="button" class="secondary" :disabled="criteria.length >= 5 || hasUnifiedCriterion" @click="criteria.push({fieldname:'',value:''})">{{ __('Add criterion') }}</button>
+                <button type="button" class="secondary" :disabled="criteria.length >= 5 || hasUnifiedCriterion" @click="addCriterion">{{ __('Add criterion') }}</button>
                 <button class="primary" :disabled="busy">{{ busy ? __('Searching…') : __('Search') }}</button>
               </div>
             </form>
@@ -122,6 +123,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { call } from "./api";
 import AdminPanel from "./components/AdminPanel.vue";
+import { searchFieldRequiresCompanion, searchGuidance } from "./searchGuidance";
 import { applyPortalTheme } from "./theme";
 
 const __ = (text) => text;
@@ -144,6 +146,18 @@ const showCentreLabels = computed(() => Boolean(boot.value?.show_centre_labels))
 const recordRevealReasons = computed(() => (boot.value?.reveal_reasons || []).filter((reason) => reason.reason_code !== "CORRECTION_REVIEW"));
 const correctionReviewReason = computed(() => (boot.value?.reveal_reasons || []).find((reason) => reason.reason_code === "CORRECTION_REVIEW"));
 const hasUnifiedCriterion = computed(() => criteria.some((row) => searchFields.value.find((field) => field.fieldname === row.fieldname)?.source === "Unified Person"));
+const searchGuidanceState = computed(() => searchGuidance(criteria, searchFields.value));
+const searchGuidanceMessage = computed(() => {
+  const guidance = searchGuidanceState.value;
+  if (!guidance) return "";
+  if (guidance.code === "date-needs-name") return __(`${guidance.label} cannot be searched alone. Add a name field.`);
+  if (guidance.code === "english-surname-needs-companion") return __(`${guidance.label} cannot be searched alone. Add English First Name or Date of Birth.`);
+  if (guidance.code === "chinese-surname-needs-companion") return __(`${guidance.label} cannot be searched alone. Add Chinese First Name or Date of Birth.`);
+  if (guidance.code === "field-needs-companion") return __(`${guidance.label} cannot be searched alone. Add another policy-approved criterion.`);
+  if (guidance.code === "unified-alone") return __("Unified Person Number must be searched on its own. Remove the other criteria.");
+  if (guidance.code === "duplicate") return __("Each search field may be supplied once. Choose a different field.");
+  return __("This combination is not sufficient. Add Date of Birth, or use a matching First Name and Surname.");
+});
 const correctableFields = computed(() => selected.value?.fields.filter((field) => field.correctable) || []);
 const displayFields = computed(() => { if (!selected.value) return []; const raw = Object.fromEntries((revealed.value?.fields || []).map((field) => [field.fieldname,field.value])); return selected.value.fields.map((field) => ({...field,value:Object.hasOwn(raw,field.fieldname)?raw[field.fieldname]:field.value})); });
 const displayPersonFields = computed(() => { const fields=revealed.value?.person_fields?.length ? revealed.value.person_fields : selected.value?.person_fields; return fields || []; });
@@ -156,6 +170,8 @@ const contactGroups = computed(() => [
   {label:__("Contact persons"),fields:contactFields.value.filter((field)=>field.fieldname.startsWith("contact"))},
 ].filter((group)=>group.fields.length));
 function inputType(fieldname) { const kind=searchFields.value.find((f)=>f.fieldname===fieldname)?.data_kind; return kind==="Date"?"date":kind==="Email"?"email":"text"; }
+function addCriterion() { if(criteria.length<5&&!hasUnifiedCriterion.value)criteria.push({fieldname:"",value:""}); }
+function handleSearchFieldChange(index) { const field=searchFields.value.find((item)=>item.fieldname===criteria[index]?.fieldname); if(criteria.length===1&&searchFieldRequiresCompanion(field))addCriterion(); }
 function isRestrictedNameSearch(rows) { const fields=rows.map((row)=>row.fieldname); if(fields.length===1)return ["eng_firstname","chi_firstname"].includes(fields[0]); if(fields.length!==2)return false; return [["eng_firstname","eng_surname"],["chi_firstname","chi_surname"]].some((pair)=>pair.every((field)=>fields.includes(field))); }
 function serviceNames(records) { return [...new Set((records || []).map((record)=>record.service_name).filter(Boolean))]; }
 function setUniqueResultServices() { serviceSummary.value=results.value.length===1?serviceNames(results.value[0].records):[]; }
