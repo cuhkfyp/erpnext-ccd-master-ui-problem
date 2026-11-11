@@ -10,6 +10,7 @@ from ccd_portal.primitives import (
 	governed_phone_search_fieldnames,
 	is_first_name_only,
 	is_restricted_name_search,
+	is_statement_timeout_error,
 	is_transient_database_lock_error,
 	is_valid_hkid,
 	is_valid_source_column,
@@ -69,6 +70,19 @@ class PrimitiveTests(unittest.TestCase):
 		self.assertFalse(
 			is_transient_database_lock_error(RuntimeError(1062, "Duplicate entry"))
 		)
+
+	def test_statement_timeouts_are_distinct_from_lock_contention(self):
+		mariadb_timeout = RuntimeError(
+			1969,
+			"Query execution was interrupted (max_statement_time exceeded)",
+		)
+		mysql_timeout = RuntimeError(
+			3024,
+			"Query execution was interrupted, maximum statement execution time exceeded",
+		)
+		self.assertTrue(is_statement_timeout_error(RuntimeError("wrapped", mariadb_timeout)))
+		self.assertTrue(is_statement_timeout_error(mysql_timeout))
+		self.assertFalse(is_statement_timeout_error(RuntimeError(1205, "Lock wait timeout exceeded")))
 
 	def test_english_and_chinese_first_names_are_the_standalone_weak_name_exceptions(self):
 		chinese_first_name = {

@@ -17,9 +17,9 @@
       <AdminPanel v-else-if="boot?.is_access_administrator" :can-activate-policy="boot.can_activate_policy" />
       <template v-else-if="boot">
         <nav class="tabs" aria-label="Portal sections">
-          <button class="tab" :class="{active:view==='search'}" @click="view='search'">{{ __('Targeted search') }}</button>
-          <button v-if="canViewCorrections" class="tab" :class="{active:view==='corrections'}" @click="openCorrections">{{ boot.user.authority === 'Data Steward' ? __('Correction queue') : __('My corrections') }}</button>
-          <button v-if="canReportConcern" class="tab" :class="{active:view==='concerns'}" @click="openConcerns">{{ __('My identity concerns') }}</button>
+          <button class="tab" :class="{active:view==='search'}" :disabled="searching" @click="view='search'">{{ __('Targeted search') }}</button>
+          <button v-if="canViewCorrections" class="tab" :class="{active:view==='corrections'}" :disabled="searching" @click="openCorrections">{{ boot.user.authority === 'Data Steward' ? __('Correction queue') : __('My corrections') }}</button>
+          <button v-if="canReportConcern" class="tab" :class="{active:view==='concerns'}" :disabled="searching" @click="openConcerns">{{ __('My identity concerns') }}</button>
         </nav>
 
         <template v-if="view === 'search'">
@@ -30,19 +30,20 @@
               <div class="grid">
                 <div v-for="(criterion,index) in criteria" :key="index" class="field">
                   <label :for="`criteria-${index}`">{{ __('Search field') }}</label>
-                  <select :id="`criteria-${index}`" v-model="criterion.fieldname" required @change="handleSearchFieldChange">
+                  <select :id="`criteria-${index}`" v-model="criterion.fieldname" :disabled="searching" required @change="handleSearchFieldChange">
                     <option value="" disabled>{{ __('Select a field') }}</option>
                     <option v-for="field in searchFields" :key="field.fieldname" :value="field.fieldname">{{ field.label }}</option>
                   </select>
-                  <input v-model="criterion.value" :type="inputType(criterion.fieldname)" :aria-label="__('Exact value')" autocomplete="off" required />
-                  <button v-if="criteria.length > 1" type="button" class="secondary" @click="criteria.splice(index,1)">{{ __('Remove') }}</button>
+                  <input v-model="criterion.value" :type="inputType(criterion.fieldname)" :aria-label="__('Exact value')" :disabled="searching" autocomplete="off" required />
+                  <button v-if="criteria.length > 1" type="button" class="secondary" :disabled="searching" @click="criteria.splice(index,1)">{{ __('Remove') }}</button>
                 </div>
               </div>
               <p v-if="searchGuidanceMessage" class="notice search-guidance" role="status" aria-live="polite">{{ searchGuidanceMessage }}</p>
               <div class="actions">
-                <button type="button" class="secondary" :disabled="criteria.length >= 5 || hasUnifiedCriterion" @click="addCriterion">{{ __('Add criterion') }}</button>
-                <button class="primary" :disabled="busy">{{ busy ? __('Searching…') : __('Search') }}</button>
+                <button type="button" class="secondary" :disabled="searching || criteria.length >= 5 || hasUnifiedCriterion" @click="addCriterion">{{ __('Add criterion') }}</button>
+                <button class="primary" :disabled="busy">{{ searching ? `${__('Searching')}… ${searchElapsedSeconds}s` : __('Search') }}</button>
               </div>
+              <p v-if="searching" class="notice" role="status" aria-live="polite">{{ __('Still processing; no timeout has been reported.') }} {{ __('The submitted criteria are locked until this request completes.') }} {{ __('The portal will report a request timeout if no response arrives within 15 seconds.') }}</p>
             </form>
           </section>
 
@@ -142,7 +143,7 @@ import { applyPortalTheme } from "./theme";
 
 const __ = (text) => text;
 const sessionAuthenticated = Boolean(window.ccd_portal_authenticated);
-const loading = ref(true), busy = ref(false), error = ref(""), message = ref(""), boot = ref(null), unauthenticated = ref(!sessionAuthenticated), view = ref("search"), detailSection = ref("details");
+const loading = ref(true), busy = ref(false), searching = ref(false), searchElapsedSeconds = ref(0), error = ref(""), message = ref(""), boot = ref(null), unauthenticated = ref(!sessionAuthenticated), view = ref("search"), detailSection = ref("details");
 const criteria = reactive([{fieldname:"",value:""}]), results = ref([]), searchRecordCount = ref(0), searchTruncated = ref(false), searched = ref(false), searchedByRestrictedName = ref(false), serviceSummary = ref([]), selected = ref(null), detailCard = ref(null), samePersonGroup = ref(null), revealed = ref(null), revealSeconds = ref(0), correctionRows = ref([]), concernRows = ref([]);
 const showServiceDialog = ref(false), showReveal = ref(false), showCorrection = ref(false), decisionRequest = ref(null), decisionReview = ref(null), concernGroup = ref(null);
 const revealForm = reactive({reason_code:"",context_note:""});
@@ -150,7 +151,7 @@ const correctionForm = reactive({changes:{},selected:{},reason:"",centre:""});
 const decisionForm = reactive({decision:"Approve",reason:""});
 const reviewForm = reactive({reason_code:"",context_note:""});
 const concernForm = reactive({record_ids:[],reason:""});
-let revealTimer = null, countdownTimer = null, reviewTimer = null;
+let revealTimer = null, countdownTimer = null, reviewTimer = null, searchTimer = null;
 const searchFields = computed(() => boot.value?.search_fields || boot.value?.policy?.fields?.filter((field) => field.searchable) || []);
 const canReveal = computed(() => ["Operator","Data Steward"].includes(boot.value?.user.authority));
 const canViewCorrections = computed(() => ["Operator","Data Steward"].includes(boot.value?.user.authority) && Boolean(boot.value?.correction_requests_enabled));
@@ -196,7 +197,7 @@ async function viewSelectedDetail() { closeServiceDialog(); await nextTick(); de
 function clearSelected() { closeServiceDialog(); clearReveal(); selected.value=null; samePersonGroup.value=null; detailSection.value="details"; setUniqueResultServices(); }
 function clearSearchResults() { results.value=[]; searchRecordCount.value=0; searchTruncated.value=false; searched.value=false; searchedByRestrictedName.value=false; serviceSummary.value=[]; }
 function setError(e) { error.value=e.message || __("The request could not be completed."); unauthenticated.value=e.status===401 || (!sessionAuthenticated && e.status===403); }
-async function runSearch() { busy.value=true; error.value=""; message.value=""; clearSelected(); clearSearchResults(); const submitted=criteria.map((row)=>({...row})); try { const data=await call("ccd_portal.api.search",{criteria:submitted}); results.value=data.results; searchRecordCount.value=data.record_count; searchTruncated.value=Boolean(data.truncated); searched.value=true; searchedByRestrictedName.value=isRestrictedNameSearch(submitted); await loadUniqueResultServices(data.services_used || []); criteria.forEach((row)=>row.value=""); } catch(e){setError(e);} finally{busy.value=false;} }
+async function runSearch() { if(searching.value)return; busy.value=true; searching.value=true; searchElapsedSeconds.value=0; const searchStarted=Date.now(); searchTimer=setInterval(()=>{searchElapsedSeconds.value=Math.floor((Date.now()-searchStarted)/1000);},1000); error.value=""; message.value=""; clearSelected(); clearSearchResults(); const submitted=criteria.map((row)=>({...row})); try { const data=await call("ccd_portal.api.search",{criteria:submitted},true,{timeoutMs:15000,timeoutMessage:__("The portal did not receive a search response within 15 seconds. No result was applied; retry or narrow the criteria.")}); results.value=data.results; searchRecordCount.value=data.record_count; searchTruncated.value=Boolean(data.truncated); searched.value=true; searchedByRestrictedName.value=isRestrictedNameSearch(submitted); await loadUniqueResultServices(data.services_used || []); criteria.forEach((row)=>row.value=""); } catch(e){setError(e);} finally{if(searchTimer)clearInterval(searchTimer);searchTimer=null;searching.value=false;busy.value=false;} }
 async function openDetail(id) { busy.value=true; error.value=""; closeServiceDialog(); clearReveal(); samePersonGroup.value=null; detailSection.value="details"; try { selected.value=await call("ccd_portal.api.detail",{record_id:id}); serviceSummary.value=[...new Set(selected.value?.services_used || [selected.value?.service_name].filter(Boolean))]; showServiceDialog.value=true; } catch(e){setError(e);} finally{busy.value=false;} }
 async function showSamePerson() { if(!selected.value)return; busy.value=true; error.value=""; message.value=""; try { const data=await call("ccd_portal.api.same_person_records",{record_id:selected.value.id}); samePersonGroup.value=data.results?.find((group)=>group.records?.length>1) || null; if(samePersonGroup.value)serviceSummary.value=serviceNames(samePersonGroup.value.records); else message.value=__("No additional accessible confirmed same-person records were found."); } catch(e){setError(e);} finally{busy.value=false;} }
 async function doReveal() { busy.value=true; error.value=""; try { revealed.value=await call("ccd_portal.api.reveal",{record_id:selected.value.id,...revealForm}); revealSeconds.value=revealed.value.expires_in; showReveal.value=false; revealForm.reason_code=""; revealForm.context_note=""; countdownTimer=setInterval(()=>revealSeconds.value=Math.max(0,revealSeconds.value-1),1000); revealTimer=setTimeout(clearReveal,revealed.value.expires_in*1000); } catch(e){setError(e);} finally{busy.value=false;} }
@@ -213,5 +214,5 @@ async function loadCorrectionReview() { busy.value=true; error.value=""; try { d
 async function submitDecision() { if(!decisionReview.value)return; busy.value=true; error.value=""; try { await call("ccd_portal.api.decide_correction",{request_id:decisionRequest.value.name,...decisionForm}); closeDecision(); decisionForm.reason=""; message.value=__("Decision recorded and audited."); await openCorrections(); } catch(e){setError(e);} finally{busy.value=false;} }
 function visibilityChanged() { if(document.hidden) { closeServiceDialog(); clearReveal(); closeDecision(); } }
 onMounted(async()=>{ if(!sessionAuthenticated){loading.value=false;return;} document.addEventListener("visibilitychange",visibilityChanged); try{boot.value=await call("ccd_portal.api.bootstrap",{},false);applyPortalTheme(boot.value?.appearance);}catch(e){setError(e);}finally{loading.value=false;} });
-onBeforeUnmount(()=>{closeServiceDialog();clearReveal();closeDecision();closeConcern();document.removeEventListener("visibilitychange",visibilityChanged);});
+onBeforeUnmount(()=>{if(searchTimer)clearInterval(searchTimer);searchTimer=null;closeServiceDialog();clearReveal();closeDecision();closeConcern();document.removeEventListener("visibilitychange",visibilityChanged);});
 </script>

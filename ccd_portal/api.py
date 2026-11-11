@@ -25,6 +25,7 @@ from ccd_portal.primitives import (
 	governed_phone_search_fieldnames,
 	is_portal_field_visible,
 	is_restricted_name_search,
+	is_statement_timeout_error,
 	is_valid_unified_person_number,
 	portal_search_fields,
 	portal_visible_fields,
@@ -46,9 +47,15 @@ from ccd_portal.security import (
 	search_token,
 	validate_search_value,
 )
+from ccd_portal.workload import mark_search_activity
 
 MAX_RESULTS = 20
+SEARCH_QUERY_TIMEOUT_SECONDS = 8
 CORRECTION_REVIEW_REASON = "CORRECTION_REVIEW"
+
+
+class SearchProcessingLimitError(frappe.ValidationError):
+	pass
 
 
 def _json(value, expected):
@@ -507,6 +514,7 @@ def _number_lookup_response(
 
 def _search(context: PortalContext, criteria, *, override_reason: str | None = None) -> dict:
 	started = time.perf_counter()
+	mark_search_activity()
 	settings = frappe.get_single("CCD Portal Settings")
 	_check_rate_limit(context, "search", settings.searches_per_hour)
 	policy, field_map = policy_field_map()
@@ -561,48 +569,68 @@ def _search(context: PortalContext, criteria, *, override_reason: str | None = N
 			]
 			for row in normalized
 		]
-		criterion_conditions = [
-			"(" + " OR ".join(["(t.fieldname = %s AND t.token = %s)"] * len(tokens)) + ")"
-			for tokens in criterion_tokens
-		]
-		conditions = " OR ".join(criterion_conditions)
-		condition_values: list = [
-			item for tokens in criterion_tokens for pair in tokens for item in pair
-		]
-		values: list = [*condition_values]
+		token_joins = []
+		values: list = []
+		for index, tokens in enumerate(criterion_tokens, start=1):
+			alias = f"t{index}"
+			alternatives = " OR ".join(
+				[f"({alias}.fieldname = %s AND {alias}.token = %s)"] * len(tokens)
+			)
+			token_joins.append(
+				f"""JOIN `tabCCD Portal Search Token` {alias}
+				       ON {alias}.portal_record = r.name
+				      AND {alias}.active = 1
+				      AND {alias}.policy_version = %s
+				      AND ({alternatives})"""
+			)
+			values.append(policy["policy_version"])
+			values.extend(item for pair in tokens for item in pair)
 		scope_clause = ""
 		if not context.is_break_glass:
 			scope_clause = f" AND rc.centre IN ({', '.join(['%s'] * len(context.centres))})"
-		values.extend([policy["policy_version"], nowdate(), nowdate()])
+		values.extend([nowdate(), nowdate()])
 		if not context.is_break_glass:
 			values.extend(context.centres)
-		case_expression = "CASE " + " ".join(
-			f"WHEN {condition} THEN {index}"
-			for index, condition in enumerate(criterion_conditions, start=1)
-		) + " END"
-		values.extend([*condition_values, len(criterion_tokens), MAX_RESULTS + 1])
-		rows = frappe.db.sql(
-			f"""
-			SELECT r.portal_record_id
-			  FROM `tabCCD Portal Search Token` t
-			  JOIN `tabCCD Portal Record` r ON r.name = t.portal_record AND r.active = 1
+		values.append(MAX_RESULTS + 1)
+		try:
+			rows = frappe.db.sql(
+				f"""
+			SET STATEMENT max_statement_time={SEARCH_QUERY_TIMEOUT_SECONDS} FOR
+			SELECT DISTINCT r.portal_record_id
+			  FROM `tabCCD Portal Record` r
+			  {' '.join(token_joins)}
 			  JOIN `tabCCD Master` m ON m.name = r.ccd_master_record
 			  JOIN `tabCCD Portal Source Profile` sp
 			    ON sp.canonical_source_id = r.source_registration
 			   AND sp.active = 1 AND COALESCE(sp.sync_pending, 0) = 0
 			  JOIN `tabCCD Portal Record Centre` rc ON rc.portal_record = r.name AND rc.active = 1
-			 WHERE t.active = 1 AND ({conditions}) AND t.policy_version = %s
-			   AND (rc.effective_from IS NULL OR rc.effective_from <= %s)
+			 WHERE (rc.effective_from IS NULL OR rc.effective_from <= %s)
 			   AND (rc.effective_to IS NULL OR rc.effective_to >= %s)
 			   {scope_clause}
-			 GROUP BY r.portal_record_id
-			HAVING COUNT(DISTINCT {case_expression}) = %s
 			 ORDER BY r.portal_record_id
 			 LIMIT %s
 			""",
-			values,
-			as_dict=True,
-		)
+				values,
+				as_dict=True,
+			)
+		except Exception as exc:
+			if not is_statement_timeout_error(exc):
+				raise
+			write_event(
+				"Search",
+				outcome="Failed",
+				context=context,
+				criteria_types=[row["fieldname"] for row in normalized],
+				protected_value={row["fieldname"]: row["normalized"] for row in normalized},
+				metadata={
+					"stage": "database_processing_limit",
+					"duration_ms": round((time.perf_counter() - started) * 1000, 2),
+				},
+			)
+			frappe.db.commit()
+			raise SearchProcessingLimitError(
+				_("Search processing limit reached. Add a more specific criterion or retry shortly.")
+			) from exc
 		for row in rows:
 			try:
 				direct_accesses.append(ensure_record_access(row.portal_record_id, context))
@@ -712,6 +740,8 @@ def search(criteria=None):
 	try:
 		return _search(context, criteria)
 	except frappe.RateLimitExceededError:
+		raise
+	except SearchProcessingLimitError:
 		raise
 	except (frappe.PermissionError, frappe.ValidationError):
 		audit_denial("Search", context=context, metadata={"stage": "criteria"})

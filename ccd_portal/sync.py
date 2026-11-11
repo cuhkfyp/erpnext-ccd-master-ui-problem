@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 
 import frappe
 from frappe.utils import add_days, get_datetime, now_datetime
@@ -16,11 +17,13 @@ from ccd_portal.indexing import (
 )
 from ccd_portal.primitives import is_transient_database_lock_error
 from ccd_portal.source_identity import stable_source_id
+from ccd_portal.workload import search_recently_active
 
 
 RECONCILIATION_CURSOR_KEY = "ccd_portal:recent_reconciliation_cursor"
-RECONCILIATION_MAX_RECORDS = 5000
-RECONCILIATION_COMMIT_SIZE = 50
+RECONCILIATION_MAX_RECORDS = 250
+RECONCILIATION_COMMIT_SIZE = 10
+RECONCILIATION_TIME_BUDGET_SECONDS = 20
 RECONCILIATION_CURSOR_TTL_SECONDS = 14 * 24 * 60 * 60
 
 
@@ -116,21 +119,36 @@ def reconcile_record(ccd_master_name: str) -> None:
 def reconcile_recent_records() -> None:
 	if not frappe.conf.get("ccd_portal_hmac_secret"):
 		return
-	if frappe.db.count("CCD Portal Policy", {"status": "Active"}) != 1:
+	policies = frappe.get_all(
+		"CCD Portal Policy",
+		filters={"status": "Active"},
+		fields=["policy_version"],
+		limit=2,
+	)
+	if len(policies) != 1:
 		return
 	# This hourly safety net must never compete with a governed full-source
 	# refresh. Document events remain the primary real-time indexing path.
-	if _source_refresh_in_progress():
+	if _source_refresh_in_progress() or search_recently_active():
 		return
+	started = time.monotonic()
 	state = _reconciliation_cursor()
 	rows = frappe.db.sql(
 		"""
-		SELECT name, modified
-		  FROM `tabCCD Master`
-		 WHERE modified >= %s
-		   AND modified <= %s
-		   AND (modified > %s OR (modified = %s AND name > %s))
-		 ORDER BY modified, name
+		SELECT m.name, m.modified
+		  FROM `tabCCD Master` m
+		 WHERE m.modified >= %s
+		   AND m.modified <= %s
+		   AND (m.modified > %s OR (m.modified = %s AND m.name > %s))
+		   AND NOT EXISTS (
+		       SELECT 1
+		         FROM `tabCCD Portal Record` r
+		        WHERE r.ccd_master_record = m.name
+		          AND r.active = 1
+		          AND r.policy_version = %s
+		          AND r.source_modified >= m.modified
+		   )
+		 ORDER BY m.modified, m.name
 		 LIMIT %s
 		""",
 		(
@@ -139,12 +157,21 @@ def reconcile_recent_records() -> None:
 			get_datetime(state["last_modified"]),
 			get_datetime(state["last_modified"]),
 			str(state.get("last_name") or ""),
+			policies[0].policy_version,
 			RECONCILIATION_MAX_RECORDS,
 		),
 		as_dict=True,
 	)
 	committed_state = dict(state)
 	for position, row in enumerate(rows):
+		if (
+			search_recently_active()
+			or _source_refresh_in_progress()
+			or time.monotonic() - started >= RECONCILIATION_TIME_BUDGET_SECONDS
+		):
+			frappe.db.commit()
+			_save_reconciliation_cursor(committed_state)
+			return
 		save_point = f"ccd_portal_reconcile_{position}"
 		frappe.db.savepoint(save_point)
 		try:
@@ -170,7 +197,11 @@ def reconcile_recent_records() -> None:
 				{"last_modified": str(row.modified), "last_name": row.name}
 			)
 			_save_reconciliation_cursor(committed_state)
-			if _source_refresh_in_progress():
+			if (
+				_source_refresh_in_progress()
+				or search_recently_active()
+				or time.monotonic() - started >= RECONCILIATION_TIME_BUDGET_SECONDS
+			):
 				return
 	if rows and len(rows) % RECONCILIATION_COMMIT_SIZE:
 		frappe.db.commit()
@@ -181,13 +212,18 @@ def reconcile_recent_records() -> None:
 		_save_reconciliation_cursor(committed_state)
 	if len(rows) >= RECONCILIATION_MAX_RECORDS:
 		return
-	frappe.cache.delete_value(RECONCILIATION_CURSOR_KEY)
-	try:
-		deactivate_missing_records()
-		frappe.db.commit()
-	except Exception:
-		frappe.db.rollback()
-		frappe.log_error(frappe.get_traceback(), "CCD Portal stale-index cleanup failure")
+	# Retain a high-water mark instead of scanning the same two-day window every
+	# hour. The next run begins at this window boundary; the inclusive comparison
+	# and stale-record predicate make the handoff idempotent.
+	next_start = get_datetime(state["window_end"])
+	_save_reconciliation_cursor(
+		{
+			"window_start": str(next_start),
+			"window_end": str(now_datetime()),
+			"last_modified": str(next_start),
+			"last_name": "",
+		}
+	)
 
 
 def after_agent_sync(

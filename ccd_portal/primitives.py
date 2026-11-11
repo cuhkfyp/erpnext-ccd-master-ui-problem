@@ -19,6 +19,12 @@ TRANSIENT_DATABASE_LOCK_MESSAGES = (
 	"lock wait timeout exceeded",
 	"deadlock found when trying to get lock",
 )
+STATEMENT_TIMEOUT_CODES = frozenset({1969, 3024})
+STATEMENT_TIMEOUT_MESSAGES = (
+	"max_statement_time",
+	"maximum statement execution time",
+	"query execution was interrupted",
+)
 
 
 def governed_phone_search_fieldnames(field_map: dict[str, dict]) -> tuple[str, ...]:
@@ -82,6 +88,28 @@ def is_transient_database_lock_error(exc: BaseException) -> bool:
 			return True
 		for arg in getattr(current, "args", ()):
 			if isinstance(arg, int) and arg in TRANSIENT_DATABASE_LOCK_CODES:
+				return True
+			if isinstance(arg, BaseException):
+				pending.append(arg)
+		for linked in (getattr(current, "__cause__", None), getattr(current, "__context__", None)):
+			if isinstance(linked, BaseException):
+				pending.append(linked)
+	return False
+
+
+def is_statement_timeout_error(exc: BaseException) -> bool:
+	"""Recognize MariaDB/MySQL per-statement execution limits through wrappers."""
+	pending = [exc]
+	seen: set[int] = set()
+	while pending:
+		current = pending.pop()
+		if id(current) in seen:
+			continue
+		seen.add(id(current))
+		if any(message in str(current).casefold() for message in STATEMENT_TIMEOUT_MESSAGES):
+			return True
+		for arg in getattr(current, "args", ()):
+			if isinstance(arg, int) and arg in STATEMENT_TIMEOUT_CODES:
 				return True
 			if isinstance(arg, BaseException):
 				pending.append(arg)

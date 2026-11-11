@@ -316,13 +316,18 @@ class RepositoryContractTests(unittest.TestCase):
 		self.assertNotIn("JOB_TIMEOUT_SECONDS = 6 * 60 * 60", refresh)
 		sync = (ROOT / "ccd_portal" / "sync.py").read_text()
 		for token in (
-			"RECONCILIATION_MAX_RECORDS = 5000",
-			"RECONCILIATION_COMMIT_SIZE = 50",
+			"RECONCILIATION_MAX_RECORDS = 250",
+			"RECONCILIATION_COMMIT_SIZE = 10",
+			"RECONCILIATION_TIME_BUDGET_SECONDS = 20",
 			"_source_refresh_in_progress()",
+			"search_recently_active()",
+			"AND NOT EXISTS (",
+			"r.source_modified >= m.modified",
 			"_save_reconciliation_cursor(committed_state)",
 			"frappe.db.commit()",
 		):
 			self.assertIn(token, sync)
+		self.assertNotIn("frappe.cache.delete_value(RECONCILIATION_CURSOR_KEY)", sync)
 		self.assertEqual(operation["name"], "CCD Portal Source Refresh")
 		record = json.loads(
 			(
