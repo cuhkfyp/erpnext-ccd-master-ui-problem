@@ -2,28 +2,8 @@ from __future__ import annotations
 
 import frappe
 
-from ccd_portal.audit import write_event
-from ccd_portal.security import PortalContext
 
-
-def _lifecycle_context() -> PortalContext:
-	user = str(getattr(frappe.session, "user", "") or "").strip()
-	if not user or user == "Guest":
-		user = "Administrator"
-	return PortalContext(
-		user=user,
-		authority="System Manager",
-		centres=(),
-		is_break_glass=True,
-	)
-
-
-def _disable_linked_profiles(
-	registration_name: str,
-	*,
-	trigger: str,
-	registration_state: str,
-) -> list[str]:
+def _disable_linked_profiles(registration_name: str) -> list[str]:
 	"""Fail closed only profiles linked to this exact registration document."""
 	registration_name = str(registration_name or "").strip()
 	if not registration_name or not frappe.db.exists("DocType", "CCD Portal Source Profile"):
@@ -49,36 +29,17 @@ def _disable_linked_profiles(
 			{"active": 0, "sync_pending": 1},
 			update_modified=True,
 		)
-		write_event(
-			"Source Profile Auto Disabled",
-			context=_lifecycle_context(),
-			metadata={
-				"source_profile": profile_name,
-				"source_registration": registration_name,
-				"registration_state": registration_state,
-				"trigger": trigger,
-				"fail_closed": True,
-			},
-		)
 	return [str(name) for name in profiles]
 
 
 def on_ccd_registration_cancel(doc, method: str | None = None) -> list[str]:
 	"""Disable the exact portal profile when its registration is cancelled."""
-	return _disable_linked_profiles(
-		doc.name,
-		trigger=method or "on_cancel",
-		registration_state="Cancelled",
-	)
+	return _disable_linked_profiles(doc.name)
 
 
 def on_ccd_registration_trash(doc, method: str | None = None) -> list[str]:
 	"""Disable the exact portal profile before its registration is deleted."""
-	return _disable_linked_profiles(
-		doc.name,
-		trigger=method or "on_trash",
-		registration_state="Deleted",
-	)
+	return _disable_linked_profiles(doc.name)
 
 
 def reconcile_invalid_source_profiles() -> dict:
@@ -90,8 +51,7 @@ def reconcile_invalid_source_profiles() -> dict:
 
 	rows = frappe.db.sql(
 		"""
-		SELECT profile.source_registration,
-		       CASE WHEN registration.name IS NULL THEN 'Missing' ELSE 'Cancelled' END AS registration_state
+		SELECT profile.source_registration
 		  FROM `tabCCD Portal Source Profile` profile
 		  LEFT JOIN `tabCCD Registration` registration
 		    ON registration.name = profile.source_registration
@@ -103,11 +63,5 @@ def reconcile_invalid_source_profiles() -> dict:
 	)
 	disabled: list[str] = []
 	for row in rows:
-		disabled.extend(
-			_disable_linked_profiles(
-				row.source_registration,
-				trigger="after_migrate_reconciliation",
-				registration_state=row.registration_state,
-			)
-		)
+		disabled.extend(_disable_linked_profiles(row.source_registration))
 	return {"disabled": disabled}

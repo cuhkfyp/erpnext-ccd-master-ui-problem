@@ -237,7 +237,7 @@ class RepositoryContractTests(unittest.TestCase):
 		self.assertIn("Complete sync and refresh", panel)
 		self.assertIn('"reason": "fixed_centres"', indexing)
 
-	def test_cancelled_or_deleted_registration_disables_only_its_linked_source_profile(self):
+	def test_cancelled_or_deleted_registration_silently_disables_only_its_linked_source_profile(self):
 		hooks = (ROOT / "ccd_portal" / "hooks.py").read_text()
 		lifecycle = (ROOT / "ccd_portal" / "source_lifecycle.py").read_text()
 		install = (ROOT / "ccd_portal" / "install.py").read_text()
@@ -254,7 +254,8 @@ class RepositoryContractTests(unittest.TestCase):
 		self.assertIn('"on_trash": "ccd_portal.source_lifecycle.on_ccd_registration_trash"', hooks)
 		self.assertIn("WHERE source_registration = %s AND active = 1", lifecycle)
 		self.assertIn('{"active": 0, "sync_pending": 1}', lifecycle)
-		self.assertIn('"Source Profile Auto Disabled"', lifecycle)
+		self.assertNotIn("write_event", lifecycle)
+		self.assertNotIn("CCD Portal Audit Event", lifecycle)
 		self.assertIn("registration.docstatus <> 1", lifecycle)
 		self.assertIn("reconcile_invalid_source_profiles()", install)
 		self.assertIn("requires a submitted CCD Registration", profile)
