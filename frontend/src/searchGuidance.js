@@ -17,10 +17,10 @@ function selectedFields(criteria, searchFields) {
 }
 
 function isSameLanguageNamePair(fields) {
-  if (fields.length !== 2) return false;
+  if (fields.length < 2) return false;
   const names = new Set(fields.map((field) => field.fieldname));
   return SAME_LANGUAGE_NAME_PAIRS.some(
-    (pair) => pair.size === names.size && [...pair].every((fieldname) => names.has(fieldname)),
+    (pair) => [...pair].every((fieldname) => names.has(fieldname)),
   );
 }
 

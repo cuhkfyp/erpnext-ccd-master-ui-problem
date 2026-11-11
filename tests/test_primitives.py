@@ -108,6 +108,11 @@ class PrimitiveTests(unittest.TestCase):
 
 		self.assertTrue(is_restricted_name_search([name("eng_firstname")]))
 		self.assertTrue(
+			is_restricted_name_search(
+				[name("chi_surname"), name("eng_firstname"), name("eng_surname")]
+			)
+		)
+		self.assertTrue(
 			is_restricted_name_search([name("eng_firstname"), name("eng_surname")])
 		)
 		self.assertTrue(

@@ -116,10 +116,8 @@ def is_restricted_name_search(criteria: list[dict]) -> bool:
 		return False
 	if is_first_name_only(criteria):
 		return True
-	return bool(
-		len(criteria) == 2
-		and frozenset(row.get("fieldname") for row in criteria) in FIRST_AND_SURNAME_FIELD_SETS
-	)
+	fieldnames = frozenset(row.get("fieldname") for row in criteria)
+	return any(pair.issubset(fieldnames) for pair in FIRST_AND_SURNAME_FIELD_SETS)
 
 
 def canonical_json(value) -> str:

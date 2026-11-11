@@ -56,6 +56,18 @@ test("valid name combinations clear the guidance", () => {
   assert.equal(isAllowedSearchShape(criteria("chi_surname", "chi_firstname"), fields), true);
   assert.equal(isAllowedSearchShape(criteria("eng_surname", "birthday"), fields), true);
   assert.equal(searchGuidance(criteria("eng_firstname", "eng_surname"), fields), null);
+  assert.equal(
+    isAllowedSearchShape(criteria("chi_surname", "eng_firstname", "eng_surname"), fields),
+    true,
+  );
+  assert.equal(
+    searchGuidance(criteria("chi_surname", "eng_firstname", "eng_surname"), fields),
+    null,
+  );
+  assert.equal(
+    shouldAppendSearchCriterion(criteria("chi_surname", "eng_firstname", "eng_surname"), fields),
+    false,
+  );
 });
 
 test("each still-incomplete selection requests another criterion", () => {

@@ -210,6 +210,7 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		self.assertIn("shouldAppendSearchCriterion(criteria,searchFields.value)", app)
 		self.assertIn("export function shouldAppendSearchCriterion", guidance)
 		self.assertIn('"unsupported-combination"', guidance)
+		self.assertIn("pair.issubset(fieldnames)", (ROOT / "ccd_portal" / "primitives.py").read_text())
 
 	def test_search_truncation_only_counts_live_ccd_master_records(self):
 		api = (ROOT / "ccd_portal" / "api.py").read_text()
