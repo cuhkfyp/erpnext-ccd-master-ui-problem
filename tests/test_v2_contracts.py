@@ -107,6 +107,11 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		self.assertIn("truncated=direct_truncated", api)
 		self.assertIn("loadUniqueResultServices(data.services_used || [])", app)
 		self.assertNotIn("document.body.scrollHeight", app)
+		self.assertIn("showServiceDialog", app)
+		self.assertIn("View record details", app)
+		self.assertIn("Keep browsing", app)
+		self.assertIn('detailCard.value?.scrollIntoView({behavior:"smooth",block:"start"})', app)
+		self.assertNotIn("serviceSummarySection.value?.scrollIntoView", app)
 
 	def test_rollout_controls_distinguish_busy_from_unavailable(self):
 		panel = (ROOT / "frontend" / "src" / "components" / "AdminPanel.vue").read_text()

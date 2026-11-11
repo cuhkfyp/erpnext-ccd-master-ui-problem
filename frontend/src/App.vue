@@ -50,7 +50,7 @@
           <section v-if="results.length" aria-live="polite">
             <p class="muted">{{ searchRecordCount }} {{ __('masked record(s); maximum 20') }}</p>
             <p v-if="searchTruncated" class="notice">{{ __('Showing the first 20 accessible exact matches. Add another criterion to narrow the results.') }}</p>
-            <section ref="serviceSummarySection" class="service-summary" aria-live="polite">
+            <section class="service-summary" aria-live="polite">
               <div><strong>{{ __('Services used') }}</strong><small>{{ __('Only services from records within your centre access are shown.') }}</small></div>
               <div v-if="serviceSummary.length" class="service-summary-labels"><span v-for="service in serviceSummary" :key="service" class="pill">{{ service }}</span></div>
               <p v-else class="muted">{{ __('Select a record to view the accessible services used by that person.') }}</p>
@@ -68,7 +68,7 @@
             </div>
           </section>
 
-          <section v-if="selected" class="card" style="margin-top:1rem">
+          <section v-if="selected" ref="detailCard" class="card" style="margin-top:1rem">
             <div class="actions" style="justify-content:space-between;margin-top:0"><div><h2 style="margin-bottom:.2rem">{{ __('Masked record detail') }}</h2><span class="pill">{{ selected.service_name }}</span><span v-for="centre in (showCentreLabels ? selected.centres : [])" :key="centre" class="pill">{{ centre }}</span></div><button class="secondary" @click="clearSelected">{{ __('Close') }}</button></div>
             <nav class="tabs detail-tabs" aria-label="Record detail sections">
               <button class="tab" :class="{active:detailSection==='details'}" @click="detailSection='details'">{{ __('Details') }}</button>
@@ -109,6 +109,20 @@
       </template>
     </main>
 
+    <div v-if="showServiceDialog" class="modal-backdrop" @click.self="closeServiceDialog">
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="selected-services-title">
+        <h2 id="selected-services-title">{{ __('Services used') }}</h2>
+        <p class="muted">{{ __('Only services from records within your centre access are shown.') }}</p>
+        <div class="service-dialog-labels">
+          <span v-for="service in serviceSummary" :key="service" class="pill">{{ service }}</span>
+        </div>
+        <div class="actions">
+          <button type="button" class="primary" @click="viewSelectedDetail">{{ __('View record details') }}</button>
+          <button type="button" class="secondary" @click="closeServiceDialog">{{ __('Keep browsing') }}</button>
+        </div>
+      </section>
+    </div>
+
     <div v-if="showReveal" class="modal-backdrop" @click.self="showReveal=false"><form class="modal" @submit.prevent="doReveal"><h2>{{ __('Reason-based PII reveal') }}</h2><div class="field"><label for="reason-code">{{ __('Approved reason') }}</label><select id="reason-code" v-model="revealForm.reason_code" required><option value="" disabled>{{ __('Select a reason') }}</option><option v-for="reason in recordRevealReasons" :key="reason.reason_code" :value="reason.reason_code">{{ reason.label }}</option></select></div><div class="field" style="margin-top:.8rem"><label for="reveal-context">{{ __('Optional audit explanation') }}</label><textarea id="reveal-context" v-model="revealForm.context_note" maxlength="500"></textarea><small class="muted">{{ __('Encrypted at rest and readable by System Managers in the audit event.') }}</small></div><div class="actions"><button class="primary" :disabled="busy">{{ __('Reveal temporarily') }}</button><button type="button" class="secondary" @click="showReveal=false">{{ __('Cancel') }}</button></div></form></div>
 
     <div v-if="showCorrection && canRequestCorrection" class="modal-backdrop" @click.self="showCorrection=false"><form class="modal" @submit.prevent="submitCorrection"><h2>{{ __('Correction request') }}</h2><p class="muted">{{ __('This does not modify CCD Master. A different scoped Data Steward must decide it.') }}</p><div v-if="selected?.centres.length > 1" class="field"><label for="correction-centre">{{ __('Approval centre') }}</label><select id="correction-centre" v-model="correctionForm.centre" required><option value="" disabled>{{ __('Select the centre responsible for this request') }}</option><option v-for="centre in selected.centres" :key="centre" :value="centre">{{ centre }}</option></select></div><div v-for="field in correctableFields" :key="field.fieldname" class="field" style="margin-top:.7rem"><label><input v-model="correctionForm.selected[field.fieldname]" type="checkbox" /> {{ __('Propose a change to') }} {{ field.label }}</label><input v-if="correctionForm.selected[field.fieldname]" :id="`change-${field.fieldname}`" v-model="correctionForm.changes[field.fieldname]" autocomplete="off" :aria-label="field.label" /></div><div class="field" style="margin-top:.8rem"><label for="correction-reason">{{ __('Reason') }}</label><textarea id="correction-reason" v-model="correctionForm.reason" maxlength="500" required></textarea></div><div class="actions"><button class="primary" :disabled="busy">{{ __('Submit request') }}</button><button type="button" class="secondary" @click="showCorrection=false">{{ __('Cancel') }}</button></div></form></div>
@@ -129,8 +143,8 @@ import { applyPortalTheme } from "./theme";
 const __ = (text) => text;
 const sessionAuthenticated = Boolean(window.ccd_portal_authenticated);
 const loading = ref(true), busy = ref(false), error = ref(""), message = ref(""), boot = ref(null), unauthenticated = ref(!sessionAuthenticated), view = ref("search"), detailSection = ref("details");
-const criteria = reactive([{fieldname:"",value:""}]), results = ref([]), searchRecordCount = ref(0), searchTruncated = ref(false), searched = ref(false), searchedByRestrictedName = ref(false), serviceSummary = ref([]), serviceSummarySection = ref(null), selected = ref(null), samePersonGroup = ref(null), revealed = ref(null), revealSeconds = ref(0), correctionRows = ref([]), concernRows = ref([]);
-const showReveal = ref(false), showCorrection = ref(false), decisionRequest = ref(null), decisionReview = ref(null), concernGroup = ref(null);
+const criteria = reactive([{fieldname:"",value:""}]), results = ref([]), searchRecordCount = ref(0), searchTruncated = ref(false), searched = ref(false), searchedByRestrictedName = ref(false), serviceSummary = ref([]), selected = ref(null), detailCard = ref(null), samePersonGroup = ref(null), revealed = ref(null), revealSeconds = ref(0), correctionRows = ref([]), concernRows = ref([]);
+const showServiceDialog = ref(false), showReveal = ref(false), showCorrection = ref(false), decisionRequest = ref(null), decisionReview = ref(null), concernGroup = ref(null);
 const revealForm = reactive({reason_code:"",context_note:""});
 const correctionForm = reactive({changes:{},selected:{},reason:"",centre:""});
 const decisionForm = reactive({decision:"Approve",reason:""});
@@ -177,11 +191,13 @@ function serviceNames(records) { return [...new Set((records || []).map((record)
 function setUniqueResultServices() { serviceSummary.value=results.value.length===1?serviceNames(results.value[0].records):[]; }
 async function loadUniqueResultServices(searchServices=[]) { setUniqueResultServices(); if(searchServices.length){serviceSummary.value=[...new Set(searchServices)];return;} const records=results.value.length===1?results.value[0].records:[]; if(records.length!==1)return; try { const summary=await call("ccd_portal.api.service_summary",{record_id:records[0].id}); serviceSummary.value=[...new Set(summary.services || serviceSummary.value)]; } catch { /* Identity summary is additive; retain the direct record's service label. */ } }
 function clearReveal() { revealed.value=null; revealSeconds.value=0; if(revealTimer) clearTimeout(revealTimer); if(countdownTimer) clearInterval(countdownTimer); revealTimer=null; countdownTimer=null; }
-function clearSelected() { clearReveal(); selected.value=null; samePersonGroup.value=null; detailSection.value="details"; setUniqueResultServices(); }
+function closeServiceDialog() { showServiceDialog.value=false; }
+async function viewSelectedDetail() { closeServiceDialog(); await nextTick(); detailCard.value?.scrollIntoView({behavior:"smooth",block:"start"}); }
+function clearSelected() { closeServiceDialog(); clearReveal(); selected.value=null; samePersonGroup.value=null; detailSection.value="details"; setUniqueResultServices(); }
 function clearSearchResults() { results.value=[]; searchRecordCount.value=0; searchTruncated.value=false; searched.value=false; searchedByRestrictedName.value=false; serviceSummary.value=[]; }
 function setError(e) { error.value=e.message || __("The request could not be completed."); unauthenticated.value=e.status===401 || (!sessionAuthenticated && e.status===403); }
 async function runSearch() { busy.value=true; error.value=""; message.value=""; clearSelected(); clearSearchResults(); const submitted=criteria.map((row)=>({...row})); try { const data=await call("ccd_portal.api.search",{criteria:submitted}); results.value=data.results; searchRecordCount.value=data.record_count; searchTruncated.value=Boolean(data.truncated); searched.value=true; searchedByRestrictedName.value=isRestrictedNameSearch(submitted); await loadUniqueResultServices(data.services_used || []); criteria.forEach((row)=>row.value=""); } catch(e){setError(e);} finally{busy.value=false;} }
-async function openDetail(id) { busy.value=true; error.value=""; clearReveal(); samePersonGroup.value=null; detailSection.value="details"; try { selected.value=await call("ccd_portal.api.detail",{record_id:id}); serviceSummary.value=[...new Set(selected.value?.services_used || [selected.value?.service_name].filter(Boolean))]; await nextTick(); serviceSummarySection.value?.scrollIntoView({behavior:"smooth",block:"center"}); } catch(e){setError(e);} finally{busy.value=false;} }
+async function openDetail(id) { busy.value=true; error.value=""; closeServiceDialog(); clearReveal(); samePersonGroup.value=null; detailSection.value="details"; try { selected.value=await call("ccd_portal.api.detail",{record_id:id}); serviceSummary.value=[...new Set(selected.value?.services_used || [selected.value?.service_name].filter(Boolean))]; showServiceDialog.value=true; } catch(e){setError(e);} finally{busy.value=false;} }
 async function showSamePerson() { if(!selected.value)return; busy.value=true; error.value=""; message.value=""; try { const data=await call("ccd_portal.api.same_person_records",{record_id:selected.value.id}); samePersonGroup.value=data.results?.find((group)=>group.records?.length>1) || null; if(samePersonGroup.value)serviceSummary.value=serviceNames(samePersonGroup.value.records); else message.value=__("No additional accessible confirmed same-person records were found."); } catch(e){setError(e);} finally{busy.value=false;} }
 async function doReveal() { busy.value=true; error.value=""; try { revealed.value=await call("ccd_portal.api.reveal",{record_id:selected.value.id,...revealForm}); revealSeconds.value=revealed.value.expires_in; showReveal.value=false; revealForm.reason_code=""; revealForm.context_note=""; countdownTimer=setInterval(()=>revealSeconds.value=Math.max(0,revealSeconds.value-1),1000); revealTimer=setTimeout(clearReveal,revealed.value.expires_in*1000); } catch(e){setError(e);} finally{busy.value=false;} }
 function openCorrection() { correctionForm.changes={}; correctionForm.selected={}; correctionForm.reason=""; correctionForm.centre=selected.value?.centres.length===1?selected.value.centres[0]:""; showCorrection.value=true; }
@@ -195,7 +211,7 @@ function openDecision(row) { decisionRequest.value=row; decisionReview.value=nul
 function closeDecision() { decisionRequest.value=null; decisionReview.value=null; if(reviewTimer) clearTimeout(reviewTimer); reviewTimer=null; }
 async function loadCorrectionReview() { busy.value=true; error.value=""; try { decisionReview.value=await call("ccd_portal.api.correction_detail",{request_id:decisionRequest.value.name,...reviewForm}); reviewTimer=setTimeout(closeDecision,decisionReview.value.expires_in*1000); } catch(e){setError(e);} finally{busy.value=false;} }
 async function submitDecision() { if(!decisionReview.value)return; busy.value=true; error.value=""; try { await call("ccd_portal.api.decide_correction",{request_id:decisionRequest.value.name,...decisionForm}); closeDecision(); decisionForm.reason=""; message.value=__("Decision recorded and audited."); await openCorrections(); } catch(e){setError(e);} finally{busy.value=false;} }
-function visibilityChanged() { if(document.hidden) { clearReveal(); closeDecision(); } }
+function visibilityChanged() { if(document.hidden) { closeServiceDialog(); clearReveal(); closeDecision(); } }
 onMounted(async()=>{ if(!sessionAuthenticated){loading.value=false;return;} document.addEventListener("visibilitychange",visibilityChanged); try{boot.value=await call("ccd_portal.api.bootstrap",{},false);applyPortalTheme(boot.value?.appearance);}catch(e){setError(e);}finally{loading.value=false;} });
-onBeforeUnmount(()=>{clearReveal();closeDecision();closeConcern();document.removeEventListener("visibilitychange",visibilityChanged);});
+onBeforeUnmount(()=>{closeServiceDialog();clearReveal();closeDecision();closeConcern();document.removeEventListener("visibilitychange",visibilityChanged);});
 </script>

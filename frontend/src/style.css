@@ -69,6 +69,7 @@ button, input, select, textarea { font: inherit; }
 .service-summary small { margin-top:.15rem; color:var(--portal-highlight-muted); }
 .service-summary .muted { margin:0; color:var(--portal-highlight-muted); }
 .service-summary-labels { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:.25rem; }
+.service-dialog-labels { display:flex; flex-wrap:wrap; gap:.4rem; min-height:1.5rem; margin-top:1rem; }
 .result { cursor:pointer; transition:transform .15s,border-color .15s; }.result:hover { transform:translateY(-2px); border-color:var(--portal-highlight-border); }
 .person-result { display:flex; flex-direction:column; gap:.8rem; }
 .person-heading { color:var(--portal-accent-on-card); }
