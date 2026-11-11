@@ -5,6 +5,7 @@ import {
   isAllowedSearchShape,
   searchFieldRequiresCompanion,
   searchGuidance,
+  shouldAppendSearchCriterion,
 } from "../src/searchGuidance.js";
 
 const fields = [
@@ -57,8 +58,32 @@ test("valid name combinations clear the guidance", () => {
   assert.equal(searchGuidance(criteria("eng_firstname", "eng_surname"), fields), null);
 });
 
+test("each still-incomplete selection requests another criterion", () => {
+  assert.equal(shouldAppendSearchCriterion(criteria("eng_surname"), fields), true);
+  assert.equal(shouldAppendSearchCriterion(criteria("eng_surname", "chi_surname"), fields), true);
+  assert.equal(
+    shouldAppendSearchCriterion(criteria("eng_surname", "chi_surname", "eng_surname"), fields),
+    false,
+  );
+  assert.equal(
+    shouldAppendSearchCriterion(
+      [{ fieldname: "eng_surname", value: "Smith" }, { fieldname: "", value: "" }],
+      fields,
+    ),
+    false,
+  );
+});
+
+test("auto-add stops once a valid companion is selected", () => {
+  assert.equal(shouldAppendSearchCriterion(criteria("eng_surname", "birthday"), fields), false);
+  assert.equal(shouldAppendSearchCriterion(criteria("chi_surname", "hksr_num"), fields), false);
+  assert.equal(shouldAppendSearchCriterion(criteria("eng_firstname"), fields), false);
+  assert.equal(shouldAppendSearchCriterion(criteria("chi_firstname"), fields), false);
+});
+
 test("unified person number still has to remain standalone", () => {
   assert.equal(isAllowedSearchShape(criteria("unified_person_number"), fields), true);
   assert.equal(isAllowedSearchShape(criteria("unified_person_number", "birthday"), fields), false);
   assert.equal(searchGuidance(criteria("unified_person_number", "birthday"), fields).code, "unified-alone");
+  assert.equal(shouldAppendSearchCriterion(criteria("unified_person_number", "birthday"), fields), false);
 });

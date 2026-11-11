@@ -3,6 +3,13 @@ const SAME_LANGUAGE_NAME_PAIRS = [
   new Set(["eng_firstname", "eng_surname"]),
   new Set(["chi_firstname", "chi_surname"]),
 ];
+const GUIDANCE_FIXED_BY_ANOTHER_CRITERION = new Set([
+  "date-needs-name",
+  "english-surname-needs-companion",
+  "chinese-surname-needs-companion",
+  "field-needs-companion",
+  "unsupported-combination",
+]);
 
 function selectedFields(criteria, searchFields) {
   const byName = new Map(searchFields.map((field) => [field.fieldname, field]));
@@ -63,4 +70,10 @@ export function searchGuidance(criteria, searchFields) {
     return { code: "field-needs-companion", label: field.label };
   }
   return { code: "unsupported-combination" };
+}
+
+export function shouldAppendSearchCriterion(criteria, searchFields, maximumCriteria = 5) {
+  if (criteria.length >= maximumCriteria || criteria.some((row) => !row.fieldname)) return false;
+  const guidance = searchGuidance(criteria, searchFields);
+  return Boolean(guidance && GUIDANCE_FIXED_BY_ANOTHER_CRITERION.has(guidance.code));
 }

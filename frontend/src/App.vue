@@ -30,7 +30,7 @@
               <div class="grid">
                 <div v-for="(criterion,index) in criteria" :key="index" class="field">
                   <label :for="`criteria-${index}`">{{ __('Search field') }}</label>
-                  <select :id="`criteria-${index}`" v-model="criterion.fieldname" required @change="handleSearchFieldChange(index)">
+                  <select :id="`criteria-${index}`" v-model="criterion.fieldname" required @change="handleSearchFieldChange">
                     <option value="" disabled>{{ __('Select a field') }}</option>
                     <option v-for="field in searchFields" :key="field.fieldname" :value="field.fieldname">{{ field.label }}</option>
                   </select>
@@ -137,7 +137,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { call } from "./api";
 import AdminPanel from "./components/AdminPanel.vue";
-import { searchFieldRequiresCompanion, searchGuidance } from "./searchGuidance";
+import { searchGuidance, shouldAppendSearchCriterion } from "./searchGuidance";
 import { applyPortalTheme } from "./theme";
 
 const __ = (text) => text;
@@ -185,7 +185,7 @@ const contactGroups = computed(() => [
 ].filter((group)=>group.fields.length));
 function inputType(fieldname) { const kind=searchFields.value.find((f)=>f.fieldname===fieldname)?.data_kind; return kind==="Date"?"date":kind==="Email"?"email":"text"; }
 function addCriterion() { if(criteria.length<5&&!hasUnifiedCriterion.value)criteria.push({fieldname:"",value:""}); }
-function handleSearchFieldChange(index) { const field=searchFields.value.find((item)=>item.fieldname===criteria[index]?.fieldname); if(criteria.length===1&&searchFieldRequiresCompanion(field))addCriterion(); }
+function handleSearchFieldChange() { if(shouldAppendSearchCriterion(criteria,searchFields.value))addCriterion(); }
 function isRestrictedNameSearch(rows) { const fields=rows.map((row)=>row.fieldname); if(fields.length===1)return ["eng_firstname","chi_firstname"].includes(fields[0]); if(fields.length!==2)return false; return [["eng_firstname","eng_surname"],["chi_firstname","chi_surname"]].some((pair)=>pair.every((field)=>fields.includes(field))); }
 function serviceNames(records) { return [...new Set((records || []).map((record)=>record.service_name).filter(Boolean))]; }
 function setUniqueResultServices() { serviceSummary.value=results.value.length===1?serviceNames(results.value[0].records):[]; }

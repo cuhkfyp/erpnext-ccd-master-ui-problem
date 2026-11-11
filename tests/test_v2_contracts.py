@@ -204,6 +204,13 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		clear = app.index("clearSearchResults()", search_start)
 		self.assertLess(clear, request)
 
+	def test_incomplete_search_combinations_keep_requesting_a_companion(self):
+		app = (ROOT / "frontend" / "src" / "App.vue").read_text()
+		guidance = (ROOT / "frontend" / "src" / "searchGuidance.js").read_text()
+		self.assertIn("shouldAppendSearchCriterion(criteria,searchFields.value)", app)
+		self.assertIn("export function shouldAppendSearchCriterion", guidance)
+		self.assertIn('"unsupported-combination"', guidance)
+
 	def test_search_truncation_only_counts_live_ccd_master_records(self):
 		api = (ROOT / "ccd_portal" / "api.py").read_text()
 		query_start = api.index("FROM `tabCCD Portal Search Token` t")
