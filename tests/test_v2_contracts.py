@@ -181,6 +181,8 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		self.assertIn('"token_fieldnames": phone_fieldnames or (fieldname,)', api)
 		self.assertIn('alias = f"t{index}"', api)
 		self.assertIn("SELECT DISTINCT r.portal_record_id", api)
+		self.assertIn("FORCE INDEX (ccd_portal_token_policy_lookup)", api)
+		self.assertIn("FORCE INDEX (ccd_portal_token_record)", api)
 		self.assertNotIn("COUNT(DISTINCT {case_expression})", api)
 		self.assertIn('boot.value?.search_fields', app)
 
@@ -219,7 +221,7 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 
 	def test_search_truncation_only_counts_live_ccd_master_records(self):
 		api = (ROOT / "ccd_portal" / "api.py").read_text()
-		query_start = api.index("FROM `tabCCD Portal Record` r")
+		query_start = api.index("FROM `tabCCD Portal Search Token` t1")
 		query_end = api.index('direct_truncated = len(rows) > MAX_RESULTS', query_start)
 		search_query = api[query_start:query_end]
 		self.assertIn(
@@ -240,6 +242,8 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		self.assertIn("SET STATEMENT max_statement_time={SEARCH_QUERY_TIMEOUT_SECONDS} FOR", api)
 		self.assertIn("is_statement_timeout_error", primitives)
 		self.assertIn("database_processing_limit", api)
+		self.assertIn('outcome="Error"', api)
+		self.assertNotIn('outcome="Failed"', api)
 		self.assertIn("timeoutMs:15000", app)
 		self.assertIn('error.code = "REQUEST_TIMEOUT"', browser_api)
 		self.assertIn(':disabled="searching"', app)

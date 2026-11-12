@@ -562,22 +562,40 @@ def _search(context: PortalContext, criteria, *, override_reason: str | None = N
 			}
 		)
 	else:
+		ordered_criteria = sorted(
+			normalized,
+			key=lambda row: (
+				0
+				if row["strong"]
+				else 1
+				if row["data_kind"] == "Date"
+				else 2
+				if row["fieldname"] in {"eng_firstname", "chi_firstname"}
+				else 3
+			),
+		)
 		criterion_tokens = [
 			[
 				(fieldname, search_token(fieldname, row["normalized"]))
 				for fieldname in row["token_fieldnames"]
 			]
-			for row in normalized
+			for row in ordered_criteria
 		]
 		token_joins = []
-		values: list = []
-		for index, tokens in enumerate(criterion_tokens, start=1):
+		first_tokens = criterion_tokens[0]
+		first_alternatives = " OR ".join(
+			["(t1.fieldname = %s AND t1.token = %s)"] * len(first_tokens)
+		)
+		values: list = [policy["policy_version"]]
+		values.extend(item for pair in first_tokens for item in pair)
+		for index, tokens in enumerate(criterion_tokens[1:], start=2):
 			alias = f"t{index}"
 			alternatives = " OR ".join(
 				[f"({alias}.fieldname = %s AND {alias}.token = %s)"] * len(tokens)
 			)
 			token_joins.append(
-				f"""JOIN `tabCCD Portal Search Token` {alias}
+				f"""STRAIGHT_JOIN `tabCCD Portal Search Token` {alias}
+				       FORCE INDEX (ccd_portal_token_record)
 				       ON {alias}.portal_record = r.name
 				      AND {alias}.active = 1
 				      AND {alias}.policy_version = %s
@@ -597,13 +615,21 @@ def _search(context: PortalContext, criteria, *, override_reason: str | None = N
 				f"""
 			SET STATEMENT max_statement_time={SEARCH_QUERY_TIMEOUT_SECONDS} FOR
 			SELECT DISTINCT r.portal_record_id
-			  FROM `tabCCD Portal Record` r
+			  FROM `tabCCD Portal Search Token` t1
+			       FORCE INDEX (ccd_portal_token_policy_lookup)
+			  STRAIGHT_JOIN `tabCCD Portal Record` r
+			    ON r.name = t1.portal_record
+			   AND r.active = 1
+			   AND t1.active = 1
+			   AND t1.policy_version = %s
+			   AND ({first_alternatives})
 			  {' '.join(token_joins)}
-			  JOIN `tabCCD Master` m ON m.name = r.ccd_master_record
-			  JOIN `tabCCD Portal Source Profile` sp
+			  STRAIGHT_JOIN `tabCCD Master` m ON m.name = r.ccd_master_record
+			  STRAIGHT_JOIN `tabCCD Portal Source Profile` sp
 			    ON sp.canonical_source_id = r.source_registration
 			   AND sp.active = 1 AND COALESCE(sp.sync_pending, 0) = 0
-			  JOIN `tabCCD Portal Record Centre` rc ON rc.portal_record = r.name AND rc.active = 1
+			  STRAIGHT_JOIN `tabCCD Portal Record Centre` rc
+			    ON rc.portal_record = r.name AND rc.active = 1
 			 WHERE (rc.effective_from IS NULL OR rc.effective_from <= %s)
 			   AND (rc.effective_to IS NULL OR rc.effective_to >= %s)
 			   {scope_clause}
@@ -618,7 +644,7 @@ def _search(context: PortalContext, criteria, *, override_reason: str | None = N
 				raise
 			write_event(
 				"Search",
-				outcome="Failed",
+				outcome="Error",
 				context=context,
 				criteria_types=[row["fieldname"] for row in normalized],
 				protected_value={row["fieldname"]: row["normalized"] for row in normalized},
