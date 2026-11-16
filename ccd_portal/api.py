@@ -51,6 +51,7 @@ from ccd_portal.workload import mark_search_activity
 
 MAX_RESULTS = 20
 SEARCH_QUERY_TIMEOUT_SECONDS = 8
+SEARCH_QUERY_RETRY_TIMEOUT_SECONDS = 4
 CORRECTION_REVIEW_REASON = "CORRECTION_REVIEW"
 
 
@@ -526,7 +527,7 @@ def _search(context: PortalContext, criteria, *, override_reason: str | None = N
 			"first-name-search",
 			getattr(settings, "chinese_first_name_searches_per_hour", 10) or 10,
 		)
-	_, field_policies = get_active_policy()
+	_active_policy, field_policies = get_active_policy()
 	state = _same_person_state(context, policy, settings)
 	same_person_applied = bool(state["effective"] and not restricted_name_search)
 	direct_accesses: list[dict] = []
@@ -610,10 +611,7 @@ def _search(context: PortalContext, criteria, *, override_reason: str | None = N
 		if not context.is_break_glass:
 			values.extend(context.centres)
 		values.append(MAX_RESULTS + 1)
-		try:
-			rows = frappe.db.sql(
-				f"""
-			SET STATEMENT max_statement_time={SEARCH_QUERY_TIMEOUT_SECONDS} FOR
+		search_sql = f"""
 			SELECT DISTINCT r.portal_record_id
 			  FROM `tabCCD Portal Search Token` t1
 			       FORCE INDEX (ccd_portal_token_policy_lookup)
@@ -635,13 +633,25 @@ def _search(context: PortalContext, criteria, *, override_reason: str | None = N
 			   {scope_clause}
 			 ORDER BY r.portal_record_id
 			 LIMIT %s
-			""",
-				values,
-				as_dict=True,
-			)
-		except Exception as exc:
-			if not is_statement_timeout_error(exc):
-				raise
+			"""
+		rows = None
+		last_timeout = None
+		for timeout_seconds in (
+			SEARCH_QUERY_TIMEOUT_SECONDS,
+			SEARCH_QUERY_RETRY_TIMEOUT_SECONDS,
+		):
+			try:
+				rows = frappe.db.sql(
+					f"SET STATEMENT max_statement_time={timeout_seconds} FOR\n{search_sql}",
+					values,
+					as_dict=True,
+				)
+				break
+			except Exception as exc:
+				if not is_statement_timeout_error(exc):
+					raise
+				last_timeout = exc
+		if rows is None:
 			write_event(
 				"Search",
 				outcome="Error",
@@ -650,13 +660,14 @@ def _search(context: PortalContext, criteria, *, override_reason: str | None = N
 				protected_value={row["fieldname"]: row["normalized"] for row in normalized},
 				metadata={
 					"stage": "database_processing_limit",
+					"attempts": 2,
 					"duration_ms": round((time.perf_counter() - started) * 1000, 2),
 				},
 			)
 			frappe.db.commit()
 			raise SearchProcessingLimitError(
 				_("Search processing limit reached. Add a more specific criterion or retry shortly.")
-			) from exc
+			) from last_timeout
 		for row in rows:
 			try:
 				direct_accesses.append(ensure_record_access(row.portal_record_id, context))
@@ -1035,7 +1046,7 @@ def submit_identity_concern(record_ids=None, reason: str | None = None):
 	record_ids = [value.strip() for value in record_ids]
 	if any(not value for value in record_ids) or len(set(record_ids)) != len(record_ids):
 		frappe.throw(_("Select each visible record once."), frappe.ValidationError)
-	policy, _ = get_active_policy()
+	policy, _policy_fields = get_active_policy()
 	if not _same_person_state(context, policy, settings)["effective"]:
 		frappe.throw(_("This grouped result is no longer available."), frappe.ValidationError)
 	person = None
@@ -1186,7 +1197,7 @@ def identity_concern_review_context(concern_id: str, reason: str):
 			record_ids,
 			as_dict=True,
 		)
-		_, field_policies = get_active_policy()
+		_active_policy, field_policies = get_active_policy()
 		identity_fields = _identity_review_fields(field_policies)
 		fieldnames = [row["fieldname"] for row in identity_fields]
 		master_values = (
@@ -1304,7 +1315,7 @@ def correction_detail(request_id: str, reason_code: str, context_note: str | Non
 		frappe.throw(_("You are not permitted to perform this action."), frappe.PermissionError)
 	access = ensure_record_access(request.portal_record_id, context)
 	changes = json.loads(decrypt(request.encrypted_changes))
-	_, field_map = policy_field_map()
+	_active_policy, field_map = policy_field_map()
 	current = frappe.db.get_value(
 		"CCD Master",
 		access["ccd_master_record"],
@@ -1400,7 +1411,7 @@ def break_glass(action: str, reason: str, payload=None):
 	payload = _json(payload or {}, dict)
 	if action == "detail":
 		access = ensure_record_access(str(payload.get("record_id") or ""), context)
-		_, fields = get_active_policy()
+		_active_policy, fields = get_active_policy()
 		settings = frappe.get_single("CCD Portal Settings")
 		result = _masked_record(
 			access,
@@ -1411,7 +1422,7 @@ def break_glass(action: str, reason: str, payload=None):
 		settings = frappe.get_single("CCD Portal Settings")
 		_check_rate_limit(context, "reveal", settings.reveals_per_hour)
 		access = ensure_record_access(str(payload.get("record_id") or ""), context)
-		_, fields = get_active_policy()
+		_active_policy, fields = get_active_policy()
 		values = _record_document(access, fields)
 		result = {
 			"id": access["portal_record_id"],

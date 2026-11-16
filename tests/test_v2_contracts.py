@@ -239,11 +239,19 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		browser_api = (ROOT / "frontend" / "src" / "api.js").read_text()
 		app = (ROOT / "frontend" / "src" / "App.vue").read_text()
 		self.assertIn("SEARCH_QUERY_TIMEOUT_SECONDS = 8", api)
-		self.assertIn("SET STATEMENT max_statement_time={SEARCH_QUERY_TIMEOUT_SECONDS} FOR", api)
+		self.assertIn("SEARCH_QUERY_RETRY_TIMEOUT_SECONDS = 4", api)
+		self.assertIn(
+			"for timeout_seconds in (\n\t\t\tSEARCH_QUERY_TIMEOUT_SECONDS,\n\t\t\tSEARCH_QUERY_RETRY_TIMEOUT_SECONDS,",
+			api,
+		)
+		self.assertIn("max_statement_time={timeout_seconds}", api)
 		self.assertIn("is_statement_timeout_error", primitives)
 		self.assertIn("database_processing_limit", api)
+		self.assertIn('"attempts": 2', api)
 		self.assertIn('outcome="Error"', api)
 		self.assertNotIn('outcome="Failed"', api)
+		self.assertNotIn("_, field_policies = get_active_policy()", api)
+		self.assertNotIn("_, field_map = policy_field_map()", api)
 		self.assertIn("timeoutMs:15000", app)
 		self.assertIn('error.code = "REQUEST_TIMEOUT"', browser_api)
 		self.assertIn(':disabled="searching"', app)
