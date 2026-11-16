@@ -78,7 +78,7 @@ def _check_rate_limit(context: PortalContext, operation: str, configured_limit: 
 	value = frappe.cache.incrby(key, 1)
 	if value > limit:
 		audit_denial("Rate Limit Exceeded", context=context, metadata={"operation": operation})
-		raise frappe.RateLimitExceededError(_("Too many requests. Try again later."))
+		frappe.throw(_("Too many requests. Try again later."), frappe.RateLimitExceededError)
 
 
 def _require(event_type: str, *allowed: str, require_centres: bool = False) -> PortalContext:
@@ -587,8 +587,7 @@ def _search(context: PortalContext, criteria, *, override_reason: str | None = N
 		first_alternatives = " OR ".join(
 			["(t1.fieldname = %s AND t1.token = %s)"] * len(first_tokens)
 		)
-		values: list = [policy["policy_version"]]
-		values.extend(item for pair in first_tokens for item in pair)
+		values: list = []
 		for index, tokens in enumerate(criterion_tokens[1:], start=2):
 			alias = f"t{index}"
 			alternatives = " OR ".join(
@@ -596,14 +595,16 @@ def _search(context: PortalContext, criteria, *, override_reason: str | None = N
 			)
 			token_joins.append(
 				f"""STRAIGHT_JOIN `tabCCD Portal Search Token` {alias}
-				       FORCE INDEX (ccd_portal_token_record)
-				       ON {alias}.portal_record = r.name
+				       FORCE INDEX (ccd_portal_token_search_cover)
+				       ON {alias}.portal_record = t1.portal_record
 				      AND {alias}.active = 1
 				      AND {alias}.policy_version = %s
 				      AND ({alternatives})"""
 			)
 			values.append(policy["policy_version"])
 			values.extend(item for pair in tokens for item in pair)
+		values.append(policy["policy_version"])
+		values.extend(item for pair in first_tokens for item in pair)
 		scope_clause = ""
 		if not context.is_break_glass:
 			scope_clause = f" AND rc.centre IN ({', '.join(['%s'] * len(context.centres))})"
@@ -614,28 +615,26 @@ def _search(context: PortalContext, criteria, *, override_reason: str | None = N
 		search_sql = f"""
 			SELECT DISTINCT r.portal_record_id
 			  FROM `tabCCD Portal Search Token` t1
-			       FORCE INDEX (ccd_portal_token_policy_lookup)
+			       FORCE INDEX (ccd_portal_token_search_cover)
+			  {' '.join(token_joins)}
 			  STRAIGHT_JOIN `tabCCD Portal Record` r
 			    ON r.name = t1.portal_record
 			   AND r.active = 1
-			   AND t1.active = 1
-			   AND t1.policy_version = %s
-			   AND ({first_alternatives})
-			  {' '.join(token_joins)}
 			  STRAIGHT_JOIN `tabCCD Master` m ON m.name = r.ccd_master_record
 			  STRAIGHT_JOIN `tabCCD Portal Source Profile` sp
 			    ON sp.canonical_source_id = r.source_registration
 			   AND sp.active = 1 AND COALESCE(sp.sync_pending, 0) = 0
 			  STRAIGHT_JOIN `tabCCD Portal Record Centre` rc
 			    ON rc.portal_record = r.name AND rc.active = 1
-			 WHERE (rc.effective_from IS NULL OR rc.effective_from <= %s)
+			 WHERE t1.active = 1 AND t1.policy_version = %s
+			   AND ({first_alternatives})
+			   AND (rc.effective_from IS NULL OR rc.effective_from <= %s)
 			   AND (rc.effective_to IS NULL OR rc.effective_to >= %s)
 			   {scope_clause}
 			 ORDER BY r.portal_record_id
 			 LIMIT %s
 			"""
 		rows = None
-		last_timeout = None
 		for timeout_seconds in (
 			SEARCH_QUERY_TIMEOUT_SECONDS,
 			SEARCH_QUERY_RETRY_TIMEOUT_SECONDS,
@@ -650,7 +649,6 @@ def _search(context: PortalContext, criteria, *, override_reason: str | None = N
 			except Exception as exc:
 				if not is_statement_timeout_error(exc):
 					raise
-				last_timeout = exc
 		if rows is None:
 			write_event(
 				"Search",
@@ -665,9 +663,10 @@ def _search(context: PortalContext, criteria, *, override_reason: str | None = N
 				},
 			)
 			frappe.db.commit()
-			raise SearchProcessingLimitError(
-				_("Search processing limit reached. Add a more specific criterion or retry shortly.")
-			) from last_timeout
+			frappe.throw(
+				_("Search processing limit reached. Add a more specific criterion or retry shortly."),
+				SearchProcessingLimitError,
+			)
 		for row in rows:
 			try:
 				direct_accesses.append(ensure_record_access(row.portal_record_id, context))

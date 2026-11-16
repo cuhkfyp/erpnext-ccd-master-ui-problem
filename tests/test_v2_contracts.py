@@ -181,8 +181,7 @@ class SamePersonRepositoryContracts(unittest.TestCase):
 		self.assertIn('"token_fieldnames": phone_fieldnames or (fieldname,)', api)
 		self.assertIn('alias = f"t{index}"', api)
 		self.assertIn("SELECT DISTINCT r.portal_record_id", api)
-		self.assertIn("FORCE INDEX (ccd_portal_token_policy_lookup)", api)
-		self.assertIn("FORCE INDEX (ccd_portal_token_record)", api)
+		self.assertIn("FORCE INDEX (ccd_portal_token_search_cover)", api)
 		self.assertNotIn("COUNT(DISTINCT {case_expression})", api)
 		self.assertIn('boot.value?.search_fields', app)
 

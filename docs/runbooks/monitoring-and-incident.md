@@ -17,6 +17,27 @@ Review at least daily during pilot and after every deployment:
 Audit retention is indefinite until HKSR approves a duration. No automatic log
 clearing hook is configured for portal events.
 
+## Search processing limits
+
+A Search audit event with outcome `Error` and metadata stage
+`database_processing_limit` means the database exceeded both the 8-second
+attempt and its single 4-second retry. This is separate from an hourly quota
+denial and the browser's 15-second request deadline. The API publishes a safe
+message through Frappe's message log; the browser also recognizes
+`SearchProcessingLimitError` if only the exception type is returned.
+
+For query investigations, inspect `EXPLAIN` with the active policy and centre
+filters. Token aliases should use `ccd_portal_token_search_cover` with
+`Using index`; extra exact criteria are intersected before record joins. Compare
+uncached and repeated timings: fast repeats alone do not establish a reliable
+p95. Do not flush the shared database cache to benchmark the portal.
+
+The covering index is installed by migration and `ensure_external_schema` using
+an online, in-place build with concurrent writes allowed and a five-second
+metadata-lock wait. A failed build must be retried in a suitable window before
+deploying code that forces this index. Existing source and record indexes stay
+in place. This schema change does not require refreshing source records.
+
 ## Alert conditions
 
 Disable the portal and investigate immediately if any raw PII/source key appears

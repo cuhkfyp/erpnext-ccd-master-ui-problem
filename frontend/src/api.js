@@ -14,6 +14,19 @@ function messageFrom(error, fallback) {
   return safeMessage(error?.message, fallback);
 }
 
+// Frappe can return only exc_type, without _server_messages or a traceback.
+// Use fixed public messages for known failures; never display raw exceptions.
+const knownErrors = {
+  SearchProcessingLimitError: {
+    code: "SEARCH_PROCESSING_LIMIT",
+    message: "Search processing limit reached. Add a more specific criterion or retry shortly.",
+  },
+  RateLimitExceededError: {
+    code: "RATE_LIMIT_EXCEEDED",
+    message: "Too many requests. Try again later.",
+  },
+};
+
 export async function call(method, args = {}, post = true, requestOptions = {}) {
   const timeoutMs = Number(requestOptions.timeoutMs || 0);
   const controller = timeoutMs > 0 ? new AbortController() : null;
@@ -38,12 +51,14 @@ export async function call(method, args = {}, post = true, requestOptions = {}) 
     const body = await response.json().catch(() => ({}));
     if (!response.ok || body.exc_type) {
       const gatewayTimeout = response.status === 408 || response.status === 504;
+      const known = Object.hasOwn(knownErrors, body.exc_type) ? knownErrors[body.exc_type] : null;
       const fallback = gatewayTimeout
         ? "The server timed out before returning a result. No result was applied; retry or narrow the criteria."
-        : "The request could not be completed.";
+        : known?.message || "The request could not be completed.";
       const error = new Error(gatewayTimeout ? fallback : messageFrom(body, fallback));
       error.status = response.status;
       if (gatewayTimeout) error.code = "REQUEST_TIMEOUT";
+      else if (known) error.code = known.code;
       throw error;
     }
     return body.message;
