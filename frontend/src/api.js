@@ -59,6 +59,10 @@ export async function call(method, args = {}, post = true, requestOptions = {}) 
       error.status = response.status;
       if (gatewayTimeout) error.code = "REQUEST_TIMEOUT";
       else if (known) error.code = known.code;
+      if (known?.code === "RATE_LIMIT_EXCEEDED" && Number.isInteger(body.retry_after_seconds)
+          && body.retry_after_seconds > 0 && body.retry_after_seconds <= 3601) {
+        error.retryAfterSeconds = body.retry_after_seconds;
+      }
       throw error;
     }
     return body.message;

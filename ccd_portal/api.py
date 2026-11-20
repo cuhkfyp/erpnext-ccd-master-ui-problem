@@ -78,7 +78,16 @@ def _check_rate_limit(context: PortalContext, operation: str, configured_limit: 
 	value = frappe.cache.incrby(key, 1)
 	if value > limit:
 		audit_denial("Rate Limit Exceeded", context=context, metadata={"operation": operation})
-		frappe.throw(_("Too many requests. Try again later."), frappe.RateLimitExceededError)
+		# Report this user's existing window; reading its TTL never extends it.
+		ttl = frappe.cache.ttl(key)
+		if ttl >= 0:
+			frappe.local.response["retry_after_seconds"] = min(ttl + 1, 3601)
+		message = (
+			_("Hourly reveal limit reached ({0} requests per hour). Please wait for the limit to reset.").format(limit)
+			if operation == "reveal"
+			else _("Too many requests. Try again later.")
+		)
+		frappe.throw(message, frappe.RateLimitExceededError)
 
 
 def _require(event_type: str, *allowed: str, require_centres: bool = False) -> PortalContext:

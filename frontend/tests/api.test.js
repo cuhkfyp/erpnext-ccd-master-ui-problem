@@ -82,3 +82,20 @@ test("unknown server exceptions remain generic", async () => {
     await assert.rejects(call("ccd_portal.api.search"), (error) => error.message === "The request could not be completed.");
   } finally { global.fetch = originalFetch; }
 });
+
+test("only bounded rate-limit retry metadata reaches the dialog", async () => {
+  const originalFetch = global.fetch;
+  try {
+    for (const [type, seconds, expected] of [
+      ["RateLimitExceededError", 1183, 1183],
+      ["RateLimitExceededError", 3601, 3601],
+      ["RateLimitExceededError", -1, undefined],
+      ["RateLimitExceededError", "100", undefined],
+      ["RateLimitExceededError", 999999, undefined],
+      ["InternalError", 100, undefined],
+    ]) {
+      global.fetch = async () => ({ok:false,status:429,json:async()=>({exc_type:type,retry_after_seconds:seconds})});
+      await assert.rejects(call("ccd_portal.api.reveal"), (error) => error.retryAfterSeconds === expected);
+    }
+  } finally { global.fetch = originalFetch; }
+});
