@@ -411,7 +411,7 @@ class RepositoryContractTests(unittest.TestCase):
 		self.assertIn("--persist-only", deploy)
 		self.assertIn("ensure_runtime_app_registry()", deploy)
 		self.assertIn(
-			"done\n\nensure_runtime_app_registry\n\nif (( ! RUNTIME_ONLY )); then",
+			"done\n\nensure_runtime_app_registry\n",
 			deploy,
 		)
 		self.assertIn("without touching Docker or the site", deploy)

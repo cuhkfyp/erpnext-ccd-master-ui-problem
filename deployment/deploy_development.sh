@@ -200,6 +200,10 @@ done
 
 ensure_runtime_app_registry
 
+# Load the new preservation hooks before migrate/clear-cache can discard budgets.
+docker exec frappe_docker-backend-1 "$BENCH" --site "$SITE" execute \
+	ccd_portal.quota.prepare_cache_protection
+
 if (( ! RUNTIME_ONLY )); then
 	docker exec -u frappe -w "$APP_IN_CONTAINER/frontend" frappe_docker-backend-1 \
 		npm ci --no-audit --no-fund

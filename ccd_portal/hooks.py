@@ -12,6 +12,16 @@ doctype_js = {
 
 required_apps = ["frappe", "erpnext"]
 
+# Security budgets are not disposable UI/document cache. Frappe preserves these
+# site-scoped prefixes during clear_cache; Redis still enforces their own TTLs.
+persistent_cache_keys = [
+	"ccd-portal:search:",
+	"ccd-portal:first-name-search:",
+	"ccd-portal:reveal:",
+	"ccd-portal:identity-concern:",
+	"ccd-portal:identity-concern-review:",
+]
+
 after_install = "ccd_portal.install.after_install"
 after_migrate = "ccd_portal.install.after_migrate"
 

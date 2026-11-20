@@ -158,6 +158,7 @@ docker exec -u root "$FRONTEND_CONTAINER" sh -c '
 	fi
 ' sh "$FRONTEND_ASSETS" "$asset_stage" "$asset_previous"
 
+docker exec "$BACKEND_CONTAINER" bench --site "$SITE" execute ccd_portal.quota.prepare_cache_protection
 docker exec "$BACKEND_CONTAINER" bench --site "$SITE" clear-cache
 docker restart "${containers[@]}" >/dev/null
 for container in "${containers[@]}"; do

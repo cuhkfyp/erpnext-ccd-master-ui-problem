@@ -17,6 +17,25 @@ Review at least daily during pilot and after every deployment:
 Audit retention is indefinite until HKSR approves a duration. No automatic log
 clearing hook is configured for portal events.
 
+## Quota counters and cache maintenance
+
+Portal search, first-name search, reveal, concern submission, and concern-review
+budgets use site-scoped Redis counters. Their five precise prefixes are registered
+as `persistent_cache_keys`; routine Frappe cache clearing leaves both values and
+original expiry times intact. This does not persist revealed values or client data.
+
+Deployment/recovery runs `ccd_portal.quota.prepare_cache_protection` in a fresh
+bench process before migration or whole-site cache clearing. This refreshes only
+the cached app hooks, so the first upgrade cannot clear counters using old hooks.
+For manual upgrades, run the same preflight after installing code and before
+`bench migrate` / `bench clear-cache`. Stop if the preflight fails.
+
+This protection does not survive explicit Redis flushes, eviction, or loss of
+Redis data. Do not use those operations as routine cache maintenance. Do not
+restore a snapshot of live counters: it can overwrite concurrent requests or
+extend a window. Counters already erased before this fix cannot be reconstructed
+exactly from successful-reveal audit events; do not invent a replacement budget.
+
 ## Search processing limits
 
 A Search audit event with outcome `Error` and metadata stage

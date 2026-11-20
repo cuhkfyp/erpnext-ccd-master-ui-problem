@@ -616,6 +616,7 @@ if [[ "$initially_installed" == "0" ]]; then
 	docker exec "$backend_container" bench --site "$site" install-app ccd_portal
 fi
 echo "Migrating the target site..."
+docker exec "$backend_container" bench --site "$site" execute ccd_portal.quota.prepare_cache_protection
 docker exec "$backend_container" bench --site "$site" migrate
 docker exec "$backend_container" bench --site "$site" execute ccd_portal.install.ensure_site_secret >/dev/null
 
